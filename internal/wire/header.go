@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/quicvarint"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/quicvarint"
 )
 
 // ParseConnectionID parses the destination connection ID of a packet.

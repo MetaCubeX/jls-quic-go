@@ -6,26 +6,26 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"net"
 	"net/netip"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/metacubex/quic-go/internal/ackhandler"
-	"github.com/metacubex/quic-go/internal/handshake"
-	"github.com/metacubex/quic-go/internal/mocks"
-	mockackhandler "github.com/metacubex/quic-go/internal/mocks/ackhandler"
-	"github.com/metacubex/quic-go/internal/monotime"
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/qerr"
-	"github.com/metacubex/quic-go/internal/utils"
-	"github.com/metacubex/quic-go/internal/wire"
-	"github.com/metacubex/quic-go/qlog"
-	"github.com/metacubex/quic-go/qlogwriter"
-	"github.com/metacubex/quic-go/testutils/events"
-	"github.com/metacubex/quic-go/testutils/synctest"
+	"github.com/metacubex/jls-quic-go/internal/ackhandler"
+	"github.com/metacubex/jls-quic-go/internal/handshake"
+	"github.com/metacubex/jls-quic-go/internal/mocks"
+	mockackhandler "github.com/metacubex/jls-quic-go/internal/mocks/ackhandler"
+	"github.com/metacubex/jls-quic-go/internal/monotime"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/qerr"
+	"github.com/metacubex/jls-quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/qlog"
+	"github.com/metacubex/jls-quic-go/qlogwriter"
+	"github.com/metacubex/jls-quic-go/testutils/events"
+	"github.com/metacubex/jls-quic-go/testutils/synctest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1901,7 +1901,7 @@ func TestConnectionPacketPacing(t *testing.T) {
 }
 
 // When the send queue blocks, we need to reset the pacing timer, otherwise the run loop might busy-loop.
-// See https://github.com/metacubex/quic-go/pull/4943 for more details.
+// See https://github.com/metacubex/jls-quic-go/pull/4943 for more details.
 func TestConnectionPacingAndSendQueue(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		mockCtrl := gomock.NewController(t)

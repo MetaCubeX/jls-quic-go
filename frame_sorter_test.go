@@ -8,10 +8,10 @@ import (
 	"math"
 	"testing"
 
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/utils"
-	"github.com/metacubex/quic-go/internal/utils/tree"
-	"github.com/metacubex/quic-go/testutils/ossfuzzseeds"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/internal/utils/tree"
+	"github.com/metacubex/jls-quic-go/testutils/ossfuzzseeds"
 
 	"github.com/stretchr/testify/require"
 )

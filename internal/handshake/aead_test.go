@@ -5,10 +5,10 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"fmt"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"testing"
 
-	"github.com/metacubex/quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/require"
 )

@@ -1,10 +1,10 @@
 package ackhandler
 
 import (
-	"github.com/metacubex/quic-go/congestion"
-	"github.com/metacubex/quic-go/internal/monotime"
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/congestion"
+	"github.com/metacubex/jls-quic-go/internal/monotime"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/wire"
 )
 
 // SentPacketHandler handles ACKs received for outgoing packets

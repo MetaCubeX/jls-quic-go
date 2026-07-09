@@ -5,11 +5,11 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 
 	"golang.org/x/crypto/chacha20"
 
-	"github.com/metacubex/quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
 )
 
 type headerProtector interface {

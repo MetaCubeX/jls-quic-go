@@ -2,17 +2,17 @@ package qtls
 
 import (
 	"fmt"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"unsafe"
 )
 
-//go:linkname cipherSuitesTLS13 github.com/metacubex/tls.cipherSuitesTLS13
+//go:linkname cipherSuitesTLS13 github.com/metacubex/jls-tls.cipherSuitesTLS13
 var cipherSuitesTLS13 []unsafe.Pointer
 
-//go:linkname defaultCipherSuitesTLS13 github.com/metacubex/tls.defaultCipherSuitesTLS13
+//go:linkname defaultCipherSuitesTLS13 github.com/metacubex/jls-tls.defaultCipherSuitesTLS13
 var defaultCipherSuitesTLS13 []uint16
 
-//go:linkname defaultCipherSuitesTLS13NoAES github.com/metacubex/tls.defaultCipherSuitesTLS13NoAES
+//go:linkname defaultCipherSuitesTLS13NoAES github.com/metacubex/jls-tls.defaultCipherSuitesTLS13NoAES
 var defaultCipherSuitesTLS13NoAES []uint16
 
 var cipherSuitesModified bool

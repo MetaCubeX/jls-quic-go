@@ -2,7 +2,7 @@ package qerr
 
 import (
 	"fmt"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 )
 
 // TransportErrorCode is a QUIC transport error.

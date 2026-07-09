@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/qerr"
-	"github.com/metacubex/quic-go/internal/utils"
-	"github.com/metacubex/quic-go/internal/wire"
-	"github.com/metacubex/quic-go/testutils/synctest"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/qerr"
+	"github.com/metacubex/jls-quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/testutils/synctest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -157,7 +157,7 @@ func testStreamsMapOutgoingLimits(t *testing.T, perspective protocol.Perspective
 }
 
 // This test checks that OpenStreamSync returns the context error when the context is canceled
-// at the same time that the stream limit is increased (see https://github.com/metacubex/quic-go/issues/5659).
+// at the same time that the stream limit is increased (see https://github.com/metacubex/jls-quic-go/issues/5659).
 // The race is inherently hard to trigger: even without the fix, this test only fails intermittently.
 // To gain confidence in the fix, run it many times (e.g. 10000 times) with the race detector enabled.
 func TestStreamsMapOutgoingOpenStreamSyncCancel(t *testing.T) {

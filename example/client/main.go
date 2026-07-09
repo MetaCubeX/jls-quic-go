@@ -5,16 +5,16 @@ import (
 	"crypto/x509"
 	"flag"
 	"github.com/metacubex/http"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"io"
 	"log"
 	"os"
 	"sync"
 
-	"github.com/metacubex/quic-go"
-	"github.com/metacubex/quic-go/http3"
-	"github.com/metacubex/quic-go/http3/qlog"
-	"github.com/metacubex/quic-go/internal/testdata"
+	"github.com/metacubex/jls-quic-go"
+	"github.com/metacubex/jls-quic-go/http3"
+	"github.com/metacubex/jls-quic-go/http3/qlog"
+	"github.com/metacubex/jls-quic-go/internal/testdata"
 )
 
 func main() {

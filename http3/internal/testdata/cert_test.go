@@ -1,7 +1,7 @@
 package testdata
 
 import (
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"io"
 	"testing"
 

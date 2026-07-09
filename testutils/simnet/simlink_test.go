@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metacubex/quic-go/testutils/synctest"
+	"github.com/metacubex/jls-quic-go/testutils/synctest"
 
 	"github.com/stretchr/testify/require"
 )

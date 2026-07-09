@@ -7,18 +7,18 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"math/big"
 	"net"
 	"testing"
 	"time"
 
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/qtls"
-	"github.com/metacubex/quic-go/internal/utils"
-	"github.com/metacubex/quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/qtls"
+	"github.com/metacubex/jls-quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/internal/wire"
 
-	"github.com/metacubex/quic-go/testutils/ossfuzzseeds"
+	"github.com/metacubex/jls-quic-go/testutils/ossfuzzseeds"
 )
 
 var (

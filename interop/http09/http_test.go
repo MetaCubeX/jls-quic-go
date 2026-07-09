@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"io"
 	"net"
 	"testing"
 
-	"github.com/metacubex/quic-go"
-	"github.com/metacubex/quic-go/internal/testdata"
+	"github.com/metacubex/jls-quic-go"
+	"github.com/metacubex/jls-quic-go/internal/testdata"
 
 	"github.com/stretchr/testify/require"
 )

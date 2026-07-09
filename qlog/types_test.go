@@ -3,7 +3,7 @@ package qlog
 import (
 	"testing"
 
-	"github.com/metacubex/quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/require"
 )

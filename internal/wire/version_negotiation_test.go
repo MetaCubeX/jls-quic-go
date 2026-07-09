@@ -6,7 +6,7 @@ import (
 	mrand "github.com/metacubex/randv2"
 	"testing"
 
-	"github.com/metacubex/quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/require"
 )

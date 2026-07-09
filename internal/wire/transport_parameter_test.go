@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/qerr"
-	"github.com/metacubex/quic-go/internal/utils"
-	"github.com/metacubex/quic-go/quicvarint"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/qerr"
+	"github.com/metacubex/jls-quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/quicvarint"
 
-	"github.com/metacubex/quic-go/testutils/ossfuzzseeds"
+	"github.com/metacubex/jls-quic-go/testutils/ossfuzzseeds"
 	"github.com/stretchr/testify/require"
 )
 

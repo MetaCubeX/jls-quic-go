@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/x509"
 	"flag"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"os"
 
-	"github.com/metacubex/quic-go"
-	"github.com/metacubex/quic-go/integrationtests/tools"
-	"github.com/metacubex/quic-go/qlogwriter"
+	"github.com/metacubex/jls-quic-go"
+	"github.com/metacubex/jls-quic-go/integrationtests/tools"
+	"github.com/metacubex/jls-quic-go/qlogwriter"
 )
 
 var (

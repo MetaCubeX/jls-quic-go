@@ -2,14 +2,14 @@ package self_test
 
 import (
 	"context"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"io"
 	"net"
 	"testing"
 	"time"
 
-	"github.com/metacubex/quic-go"
-	"github.com/metacubex/quic-go/testutils/synctest"
+	"github.com/metacubex/jls-quic-go"
+	"github.com/metacubex/jls-quic-go/testutils/synctest"
 
 	"github.com/stretchr/testify/require"
 )

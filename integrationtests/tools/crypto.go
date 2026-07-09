@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"math/big"
 	"net"
 	"time"

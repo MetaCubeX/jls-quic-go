@@ -2,7 +2,7 @@ package testdata
 
 import (
 	"crypto/x509"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"os"
 	"path"
 	"runtime"

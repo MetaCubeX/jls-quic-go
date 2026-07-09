@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net"
 
-	"github.com/metacubex/quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
 )
 
 type sender interface {

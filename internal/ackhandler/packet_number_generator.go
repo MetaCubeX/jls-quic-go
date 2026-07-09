@@ -1,8 +1,8 @@
 package ackhandler
 
 import (
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/utils"
 )
 
 type packetNumberGenerator interface {

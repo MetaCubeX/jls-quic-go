@@ -3,8 +3,8 @@ package ackhandler
 import (
 	"golang.org/x/exp/slices"
 
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/utils"
 )
 
 // interval is an interval from one PacketNumber to the other

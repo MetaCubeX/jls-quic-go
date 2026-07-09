@@ -3,10 +3,10 @@ package quic
 import (
 	"context"
 	"errors"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"net"
 
-	"github.com/metacubex/quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
 )
 
 // make it possible to mock connection ID for initial generation in the tests

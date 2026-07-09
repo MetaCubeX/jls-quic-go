@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/utils"
 )
 
 // LogFrame logs a frame, either sent or received

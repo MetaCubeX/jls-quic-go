@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/metacubex/http"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"golang.org/x/exp/slices"
 	"golang.org/x/exp/slog"
 	"io"
@@ -15,10 +15,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/metacubex/quic-go"
-	"github.com/metacubex/quic-go/http3/qlog"
-	"github.com/metacubex/quic-go/qlogwriter"
-	"github.com/metacubex/quic-go/quicvarint"
+	"github.com/metacubex/jls-quic-go"
+	"github.com/metacubex/jls-quic-go/http3/qlog"
+	"github.com/metacubex/jls-quic-go/qlogwriter"
+	"github.com/metacubex/jls-quic-go/quicvarint"
 )
 
 // NextProtoH3 is the ALPN protocol negotiated during the TLS handshake, for QUIC v1 and v2.

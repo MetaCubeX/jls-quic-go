@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"hash/crc32"
 
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/qerr"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/qerr"
 )
 
 type (

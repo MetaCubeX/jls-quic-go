@@ -29,7 +29,7 @@ func TestRequestHeaderParsing(t *testing.T) {
 		testRequestHeaderParsing(t, "/foo")
 	})
 
-	// see https://github.com/metacubex/quic-go/pull/1898
+	// see https://github.com/metacubex/jls-quic-go/pull/1898
 	t.Run("path starting with //", func(t *testing.T) {
 		testRequestHeaderParsing(t, "//foo")
 	})

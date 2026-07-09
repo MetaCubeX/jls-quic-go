@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/metacubex/quic-go/internal/utils"
-	"github.com/metacubex/quic-go/qlogwriter/jsontext"
+	"github.com/metacubex/jls-quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/qlogwriter/jsontext"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

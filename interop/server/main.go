@@ -3,16 +3,16 @@ package main
 import (
 	"fmt"
 	"github.com/metacubex/http"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"log"
 	"net"
 	"os"
 
-	"github.com/metacubex/quic-go"
-	"github.com/metacubex/quic-go/http3"
-	"github.com/metacubex/quic-go/internal/qtls"
-	"github.com/metacubex/quic-go/interop/http09"
-	"github.com/metacubex/quic-go/interop/utils"
+	"github.com/metacubex/jls-quic-go"
+	"github.com/metacubex/jls-quic-go/http3"
+	"github.com/metacubex/jls-quic-go/internal/qtls"
+	"github.com/metacubex/jls-quic-go/interop/http09"
+	"github.com/metacubex/jls-quic-go/interop/utils"
 )
 
 func main() {

@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/metacubex/quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
 )
 
 const (

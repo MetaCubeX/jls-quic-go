@@ -14,11 +14,11 @@ import (
 
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptrace"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 
 	"golang.org/x/net/http/httpguts"
 
-	"github.com/metacubex/quic-go"
+	"github.com/metacubex/jls-quic-go"
 )
 
 // Settings are HTTP/3 settings that apply to the underlying connection.

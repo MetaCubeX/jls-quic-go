@@ -6,20 +6,20 @@ import (
 	"errors"
 	"fmt"
 	mrand "github.com/metacubex/randv2"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"io"
 	"net"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/metacubex/quic-go"
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/synctest"
-	"github.com/metacubex/quic-go/qlog"
-	"github.com/metacubex/quic-go/qlogwriter"
-	"github.com/metacubex/quic-go/testutils/simnet"
-	"github.com/metacubex/quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/synctest"
+	"github.com/metacubex/jls-quic-go/qlog"
+	"github.com/metacubex/jls-quic-go/qlogwriter"
+	"github.com/metacubex/jls-quic-go/testutils/simnet"
+	"github.com/metacubex/jls-quic-go/internal/utils"
 
 	"github.com/stretchr/testify/require"
 )
@@ -218,7 +218,7 @@ func TestKeepAlive(t *testing.T) {
 		requireIdleTimeoutError(t, err)
 
 		// can't rely on the server connection closing, since we impose a minimum idle timeout of 5s,
-		// see https://github.com/metacubex/quic-go/issues/4751
+		// see https://github.com/metacubex/jls-quic-go/issues/4751
 		serverConn.CloseWithError(0, "")
 	})
 }

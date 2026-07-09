@@ -8,18 +8,18 @@ import (
 	"errors"
 	"fmt"
 	mrand "github.com/metacubex/randv2"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"io"
 	"log"
 	"math"
 	"net"
 
-	"github.com/metacubex/quic-go/fuzzing/internal/helper"
-	"github.com/metacubex/quic-go/internal/handshake"
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/qtls"
-	"github.com/metacubex/quic-go/internal/utils"
-	"github.com/metacubex/quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/fuzzing/internal/helper"
+	"github.com/metacubex/jls-quic-go/internal/handshake"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/qtls"
+	"github.com/metacubex/jls-quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/internal/wire"
 )
 
 var (

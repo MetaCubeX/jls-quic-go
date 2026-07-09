@@ -4,7 +4,7 @@ import (
 	"crypto"
 	"crypto/cipher"
 	"crypto/rand"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"testing"
 	"unsafe"
 
@@ -20,7 +20,7 @@ type cipherSuiteTLS13 struct {
 	Hash   crypto.Hash
 }
 
-//go:linkname cipherSuitesTLS13 github.com/metacubex/tls.cipherSuitesTLS13
+//go:linkname cipherSuitesTLS13 github.com/metacubex/jls-tls.cipherSuitesTLS13
 var cipherSuitesTLS13 []unsafe.Pointer
 
 func cipherSuiteTLS13ByID(id uint16) *cipherSuiteTLS13 {
@@ -33,7 +33,7 @@ func cipherSuiteTLS13ByID(id uint16) *cipherSuiteTLS13 {
 	return nil
 }
 
-//go:linkname nextTrafficSecret github.com/metacubex/tls.(*cipherSuiteTLS13).nextTrafficSecret
+//go:linkname nextTrafficSecret github.com/metacubex/jls-tls.(*cipherSuiteTLS13).nextTrafficSecret
 func nextTrafficSecret(cs *cipherSuiteTLS13, trafficSecret []byte) []byte
 
 func TestHKDF(t *testing.T) {

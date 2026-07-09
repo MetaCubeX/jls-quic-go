@@ -4,13 +4,13 @@ import (
 	"golang.org/x/exp/slices"
 	"sync"
 
-	"github.com/metacubex/quic-go/internal/ackhandler"
-	"github.com/metacubex/quic-go/internal/flowcontrol"
-	"github.com/metacubex/quic-go/internal/monotime"
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/utils/ringbuffer"
-	"github.com/metacubex/quic-go/internal/wire"
-	"github.com/metacubex/quic-go/quicvarint"
+	"github.com/metacubex/jls-quic-go/internal/ackhandler"
+	"github.com/metacubex/jls-quic-go/internal/flowcontrol"
+	"github.com/metacubex/jls-quic-go/internal/monotime"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/utils/ringbuffer"
+	"github.com/metacubex/jls-quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/quicvarint"
 )
 
 const (
@@ -213,7 +213,7 @@ func (f *framer) appendControlFrames(
 // This is a hack.
 // It is easier to implement than propagating an error return value in QueueControlFrame.
 // The correct solution would be to queue frames with their respective structs.
-// See https://github.com/metacubex/quic-go/issues/4271 for the queueing of stream-related control frames.
+// See https://github.com/metacubex/jls-quic-go/issues/4271 for the queueing of stream-related control frames.
 func (f *framer) QueuedTooManyControlFrames() bool {
 	return f.queuedTooManyControlFrames
 }

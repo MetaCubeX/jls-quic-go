@@ -2,11 +2,11 @@ package qtls
 
 import (
 	"fmt"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"net"
 	"testing"
 
-	"github.com/metacubex/quic-go/internal/testdata"
+	"github.com/metacubex/jls-quic-go/internal/testdata"
 
 	"github.com/stretchr/testify/require"
 )

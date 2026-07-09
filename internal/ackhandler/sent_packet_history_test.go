@@ -3,8 +3,8 @@ package ackhandler
 import (
 	"testing"
 
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/wire"
 
 	"github.com/stretchr/testify/require"
 )

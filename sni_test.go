@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	mrand "github.com/metacubex/randv2"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"io"
 	"testing"
 
-	"github.com/metacubex/quic-go/internal/testdata"
+	"github.com/metacubex/jls-quic-go/internal/testdata"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

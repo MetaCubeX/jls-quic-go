@@ -9,11 +9,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/metacubex/quic-go"
-	h3qlog "github.com/metacubex/quic-go/http3/qlog"
-	"github.com/metacubex/quic-go/internal/utils"
-	"github.com/metacubex/quic-go/qlog"
-	"github.com/metacubex/quic-go/qlogwriter"
+	"github.com/metacubex/jls-quic-go"
+	h3qlog "github.com/metacubex/jls-quic-go/http3/qlog"
+	"github.com/metacubex/jls-quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/qlog"
+	"github.com/metacubex/jls-quic-go/qlogwriter"
 )
 
 func QlogTracer(logger io.Writer) qlogwriter.Trace {

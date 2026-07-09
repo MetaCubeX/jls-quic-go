@@ -10,9 +10,9 @@ import (
 	"log"
 	"math/big"
 
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 
-	"github.com/metacubex/quic-go"
+	"github.com/metacubex/jls-quic-go"
 )
 
 const addr = "localhost:4242"

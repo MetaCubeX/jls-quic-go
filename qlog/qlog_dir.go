@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/metacubex/quic-go/internal/utils"
-	"github.com/metacubex/quic-go/qlogwriter"
+	"github.com/metacubex/jls-quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/qlogwriter"
 )
 
 // EventSchema is the qlog event schema for QUIC

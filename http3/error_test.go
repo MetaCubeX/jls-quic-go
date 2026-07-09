@@ -3,7 +3,7 @@ package http3
 import (
 	"testing"
 
-	"github.com/metacubex/quic-go"
+	"github.com/metacubex/jls-quic-go"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -10,7 +10,7 @@ import (
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptrace"
 	mrand "github.com/metacubex/randv2"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"io"
 	"net"
 	"net/textproto"
@@ -23,12 +23,12 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/metacubex/quic-go"
-	"github.com/metacubex/quic-go/http3"
-	"github.com/metacubex/quic-go/http3/qlog"
-	quicproxy "github.com/metacubex/quic-go/integrationtests/tools/proxy"
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/testutils/events"
+	"github.com/metacubex/jls-quic-go"
+	"github.com/metacubex/jls-quic-go/http3"
+	"github.com/metacubex/jls-quic-go/http3/qlog"
+	quicproxy "github.com/metacubex/jls-quic-go/integrationtests/tools/proxy"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/testutils/events"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

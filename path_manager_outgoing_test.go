@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/synctest"
-	"github.com/metacubex/quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/synctest"
+	"github.com/metacubex/jls-quic-go/internal/wire"
 
 	"github.com/stretchr/testify/require"
 )

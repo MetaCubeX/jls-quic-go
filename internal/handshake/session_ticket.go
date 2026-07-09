@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/metacubex/quic-go/internal/wire"
-	"github.com/metacubex/quic-go/quicvarint"
+	"github.com/metacubex/jls-quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/quicvarint"
 )
 
 const sessionTicketRevision = 5

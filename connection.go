@@ -12,21 +12,21 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"golang.org/x/exp/slices"
 
-	"github.com/metacubex/quic-go/congestion"
-	"github.com/metacubex/quic-go/internal/ackhandler"
-	"github.com/metacubex/quic-go/internal/flowcontrol"
-	"github.com/metacubex/quic-go/internal/handshake"
-	"github.com/metacubex/quic-go/internal/monotime"
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/qerr"
-	"github.com/metacubex/quic-go/internal/utils"
-	"github.com/metacubex/quic-go/internal/utils/ringbuffer"
-	"github.com/metacubex/quic-go/internal/wire"
-	"github.com/metacubex/quic-go/qlog"
-	"github.com/metacubex/quic-go/qlogwriter"
+	"github.com/metacubex/jls-quic-go/congestion"
+	"github.com/metacubex/jls-quic-go/internal/ackhandler"
+	"github.com/metacubex/jls-quic-go/internal/flowcontrol"
+	"github.com/metacubex/jls-quic-go/internal/handshake"
+	"github.com/metacubex/jls-quic-go/internal/monotime"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/qerr"
+	"github.com/metacubex/jls-quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/internal/utils/ringbuffer"
+	"github.com/metacubex/jls-quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/qlog"
+	"github.com/metacubex/jls-quic-go/qlogwriter"
 )
 
 type unpacker interface {
@@ -343,7 +343,7 @@ var newConnection = func(
 		// different from protocol.DefaultActiveConnectionIDLimit.
 		// If set to the default value, it will be omitted from the transport parameters, which will make
 		// old quic-go versions interpret it as 0, instead of the default value of 2.
-		// See https://github.com/metacubex/quic-go/pull/3806.
+		// See https://github.com/metacubex/jls-quic-go/pull/3806.
 		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID: srcConnID,
 		RetrySourceConnectionID:   retrySrcConnID,
@@ -473,7 +473,7 @@ var newClientConnection = func(
 		// different from protocol.DefaultActiveConnectionIDLimit.
 		// If set to the default value, it will be omitted from the transport parameters, which will make
 		// old quic-go versions interpret it as 0, instead of the default value of 2.
-		// See https://github.com/metacubex/quic-go/pull/3806.
+		// See https://github.com/metacubex/jls-quic-go/pull/3806.
 		ActiveConnectionIDLimit:   protocol.MaxActiveConnectionIDs,
 		InitialSourceConnectionID: srcConnID,
 		EnableResetStreamAt:       conf.EnableStreamResetPartialDelivery,

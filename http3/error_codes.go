@@ -3,7 +3,7 @@ package http3
 import (
 	"fmt"
 
-	"github.com/metacubex/quic-go"
+	"github.com/metacubex/jls-quic-go"
 )
 
 type ErrCode quic.ApplicationErrorCode

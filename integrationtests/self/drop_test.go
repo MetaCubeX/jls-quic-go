@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metacubex/quic-go"
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/synctest"
-	"github.com/metacubex/quic-go/internal/wire"
-	"github.com/metacubex/quic-go/testutils/simnet"
+	"github.com/metacubex/jls-quic-go"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/synctest"
+	"github.com/metacubex/jls-quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/testutils/simnet"
 
 	"github.com/stretchr/testify/require"
 )

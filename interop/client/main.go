@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/metacubex/http"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"io"
 	"log"
 	"os"
@@ -14,13 +14,13 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/metacubex/quic-go"
-	"github.com/metacubex/quic-go/http3"
-	"github.com/metacubex/quic-go/internal/handshake"
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/qtls"
-	"github.com/metacubex/quic-go/interop/http09"
-	"github.com/metacubex/quic-go/interop/utils"
+	"github.com/metacubex/jls-quic-go"
+	"github.com/metacubex/jls-quic-go/http3"
+	"github.com/metacubex/jls-quic-go/internal/handshake"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/qtls"
+	"github.com/metacubex/jls-quic-go/interop/http09"
+	"github.com/metacubex/jls-quic-go/interop/utils"
 )
 
 var errUnsupported = errors.New("unsupported test case")

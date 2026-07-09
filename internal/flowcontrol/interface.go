@@ -1,8 +1,8 @@
 package flowcontrol
 
 import (
-	"github.com/metacubex/quic-go/internal/monotime"
-	"github.com/metacubex/quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/monotime"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
 )
 
 type flowController interface {

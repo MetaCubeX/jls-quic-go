@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"golang.org/x/exp/slog"
 	"io"
 	"net"
@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metacubex/quic-go"
-	"github.com/metacubex/quic-go/http3/internal/testdata"
-	"github.com/metacubex/quic-go/http3/qlog"
-	"github.com/metacubex/quic-go/qlogwriter"
-	"github.com/metacubex/quic-go/quicvarint"
-	"github.com/metacubex/quic-go/testutils/events"
+	"github.com/metacubex/jls-quic-go"
+	"github.com/metacubex/jls-quic-go/http3/internal/testdata"
+	"github.com/metacubex/jls-quic-go/http3/qlog"
+	"github.com/metacubex/jls-quic-go/qlogwriter"
+	"github.com/metacubex/jls-quic-go/quicvarint"
+	"github.com/metacubex/jls-quic-go/testutils/events"
 
 	"github.com/stretchr/testify/require"
 )

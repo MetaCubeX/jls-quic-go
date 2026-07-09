@@ -7,7 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"math/big"
 	"os"
 	"path/filepath"

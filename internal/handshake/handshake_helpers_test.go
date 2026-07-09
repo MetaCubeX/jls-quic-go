@@ -2,7 +2,7 @@ package handshake
 
 import (
 	"encoding/hex"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"strings"
 	"testing"
 

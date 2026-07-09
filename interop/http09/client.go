@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/metacubex/http"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"io"
 	"log"
 	"net"
@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/net/idna"
 
-	"github.com/metacubex/quic-go"
+	"github.com/metacubex/jls-quic-go"
 )
 
 // MethodGet0RTT allows a GET request to be sent using 0-RTT.

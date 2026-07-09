@@ -1,7 +1,7 @@
 package protocol
 
 import (
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"testing"
 
 	"github.com/stretchr/testify/require"

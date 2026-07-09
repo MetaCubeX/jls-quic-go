@@ -3,14 +3,14 @@ package quic
 import (
 	"context"
 	"errors"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"golang.org/x/exp/slices"
 	"net"
 	"time"
 
-	"github.com/metacubex/quic-go/internal/handshake"
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/qlogwriter"
+	"github.com/metacubex/jls-quic-go/internal/handshake"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/qlogwriter"
 )
 
 // The StreamID is the ID of a QUIC stream.

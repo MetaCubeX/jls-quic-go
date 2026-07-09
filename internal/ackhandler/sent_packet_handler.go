@@ -6,15 +6,15 @@ import (
 	"sync"
 	"time"
 
-	congestionExt "github.com/metacubex/quic-go/congestion"
-	"github.com/metacubex/quic-go/internal/congestion"
-	"github.com/metacubex/quic-go/internal/monotime"
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/qerr"
-	"github.com/metacubex/quic-go/internal/utils"
-	"github.com/metacubex/quic-go/internal/wire"
-	"github.com/metacubex/quic-go/qlog"
-	"github.com/metacubex/quic-go/qlogwriter"
+	congestionExt "github.com/metacubex/jls-quic-go/congestion"
+	"github.com/metacubex/jls-quic-go/internal/congestion"
+	"github.com/metacubex/jls-quic-go/internal/monotime"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/qerr"
+	"github.com/metacubex/jls-quic-go/internal/utils"
+	"github.com/metacubex/jls-quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/qlog"
+	"github.com/metacubex/jls-quic-go/qlogwriter"
 )
 
 const (

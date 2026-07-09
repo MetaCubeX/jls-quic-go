@@ -8,13 +8,13 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	mrand "github.com/metacubex/randv2"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 	"io"
 	"testing"
 
 	"golang.org/x/crypto/cryptobyte"
 
-	"github.com/metacubex/quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

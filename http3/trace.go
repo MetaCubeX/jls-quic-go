@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/metacubex/http/httptrace"
-	"github.com/metacubex/tls"
+	"github.com/metacubex/jls-tls"
 
-	"github.com/metacubex/quic-go"
+	"github.com/metacubex/jls-quic-go"
 )
 
 func traceGetConn(trace *httptrace.ClientTrace, hostPort string) {

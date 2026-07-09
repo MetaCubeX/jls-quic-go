@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metacubex/quic-go"
-	quicproxy "github.com/metacubex/quic-go/integrationtests/tools/proxy"
+	"github.com/metacubex/jls-quic-go"
+	quicproxy "github.com/metacubex/jls-quic-go/integrationtests/tools/proxy"
 
 	"github.com/stretchr/testify/require"
 )

@@ -5,10 +5,10 @@ import (
 	mrand "github.com/metacubex/randv2"
 	"log"
 
-	"github.com/metacubex/quic-go/fuzzing/header"
-	"github.com/metacubex/quic-go/fuzzing/internal/helper"
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/fuzzing/header"
+	"github.com/metacubex/jls-quic-go/fuzzing/internal/helper"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/wire"
 )
 
 const version = protocol.Version1

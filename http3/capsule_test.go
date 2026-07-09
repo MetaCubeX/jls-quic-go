@@ -5,7 +5,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/metacubex/quic-go/quicvarint"
+	"github.com/metacubex/jls-quic-go/quicvarint"
 
 	"github.com/stretchr/testify/require"
 )

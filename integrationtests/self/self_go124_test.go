@@ -2,7 +2,7 @@
 
 package self_test
 
-import "github.com/metacubex/tls"
+import "github.com/metacubex/jls-tls"
 
 func getCurveID(connState tls.ConnectionState) tls.CurveID {
 	return 0

@@ -3,10 +3,10 @@ package quic
 import (
 	"fmt"
 
-	"github.com/metacubex/quic-go/internal/ackhandler"
+	"github.com/metacubex/jls-quic-go/internal/ackhandler"
 
-	"github.com/metacubex/quic-go/internal/protocol"
-	"github.com/metacubex/quic-go/internal/wire"
+	"github.com/metacubex/jls-quic-go/internal/protocol"
+	"github.com/metacubex/jls-quic-go/internal/wire"
 )
 
 type framesToRetransmit struct {

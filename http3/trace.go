@@ -7,6 +7,7 @@ import (
 
 	"github.com/metacubex/http/httptrace"
 	"github.com/metacubex/jls-tls"
+	oldtls "github.com/metacubex/tls"
 
 	"github.com/metacubex/jls-quic-go"
 )
@@ -89,6 +90,34 @@ func traceTLSHandshakeStart(trace *httptrace.ClientTrace) {
 
 func traceTLSHandshakeDone(trace *httptrace.ClientTrace, state tls.ConnectionState, err error) {
 	if trace != nil && trace.TLSHandshakeDone != nil {
-		trace.TLSHandshakeDone(state, err)
+		trace.TLSHandshakeDone(httpTLSConnectionState(state), err)
 	}
 }
+
+// JLS BEGIN: adapt jls-tls state to the metacubex/http API, which still uses the original tls module.
+func httpTLSConnectionState(state tls.ConnectionState) oldtls.ConnectionState {
+	return oldtls.ConnectionState{
+		Version:                     state.Version,
+		HandshakeComplete:           state.HandshakeComplete,
+		DidResume:                   state.DidResume,
+		CipherSuite:                 state.CipherSuite,
+		CurveID:                     oldtls.CurveID(state.CurveID),
+		NegotiatedProtocol:          state.NegotiatedProtocol,
+		NegotiatedProtocolIsMutual:  state.NegotiatedProtocolIsMutual,
+		ServerName:                  state.ServerName,
+		PeerCertificates:            state.PeerCertificates,
+		VerifiedChains:              state.VerifiedChains,
+		SignedCertificateTimestamps: state.SignedCertificateTimestamps,
+		OCSPResponse:                state.OCSPResponse,
+		TLSUnique:                   state.TLSUnique,
+		ECHAccepted:                 state.ECHAccepted,
+		HelloRetryRequest:           state.HelloRetryRequest,
+	}
+}
+
+func httpTLSConnectionStatePtr(state tls.ConnectionState) *oldtls.ConnectionState {
+	converted := httpTLSConnectionState(state)
+	return &converted
+}
+
+// JLS END

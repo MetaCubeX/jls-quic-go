@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/metacubex/qpack"
 	"github.com/metacubex/jls-quic-go"
 	"github.com/metacubex/jls-quic-go/http3/qlog"
 	"github.com/metacubex/jls-quic-go/internal/utils"
 	"github.com/metacubex/jls-quic-go/qlogwriter"
+	"github.com/metacubex/qpack"
 )
 
 const (
@@ -479,7 +479,7 @@ func (c *ClientConn) doRequest(req *http.Request, str *RequestStream) (*http.Res
 		break
 	}
 	connState := c.conn.ConnectionState().TLS
-	res.TLS = &connState
+	res.TLS = httpTLSConnectionStatePtr(connState)
 	res.Request = req
 	return res, nil
 }

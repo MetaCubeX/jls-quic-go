@@ -166,11 +166,17 @@ type Conn struct {
 	mtuDiscoverer mtuDiscoverer // initialized when the transport parameters are received
 
 	maxPayloadSizeEstimate atomic.Uint32
+	// JLS BEGIN: expose the active path MTU through ShadowQUIC connection statistics.
+	currentMTU atomic.Uint32
+	// JLS END
 
 	initialStream       *initialCryptoStream
 	handshakeStream     *cryptoStream
 	oneRTTStream        *cryptoStream // only set for the server
 	cryptoStreamHandler cryptoStreamHandler
+	// JLS BEGIN: retain pre-authentication datagrams for camouflage forwarding.
+	jlsForwardCapture *jlsForwardCapture
+	// JLS END
 
 	notifyReceivedPacket chan struct{}
 	sendingScheduled     chan struct{}
@@ -323,6 +329,9 @@ var newConnection = func(
 		s.logger,
 	)
 	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
+	// JLS BEGIN: initialize ShadowQUIC's active path MTU statistic.
+	s.currentMTU.Store(uint32(s.config.InitialPacketSize))
+	// JLS END
 	statelessResetToken := statelessResetter.GetStatelessResetToken(srcConnID)
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiLocal:   protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -455,6 +464,9 @@ var newClientConnection = func(
 		s.logger,
 	)
 	s.maxPayloadSizeEstimate.Store(uint32(estimateMaxPayloadSize(protocol.ByteCount(s.config.InitialPacketSize))))
+	// JLS BEGIN: initialize ShadowQUIC's active path MTU statistic.
+	s.currentMTU.Store(uint32(s.config.InitialPacketSize))
+	// JLS END
 	oneRTTStream := newCryptoStream()
 	params := &wire.TransportParameters{
 		InitialMaxStreamDataBidiRemote: protocol.ByteCount(s.config.InitialStreamReceiveWindow),
@@ -831,6 +843,10 @@ type ConnectionStats struct {
 	// (does not monotonically increase, because packets that are declared lost
 	// can subsequently be received).
 	PacketsLost uint64
+	// JLS BEGIN: expose the active path MTU required by ShadowQUIC statistics.
+	// CurrentMTU is the current maximum QUIC packet size for the active path.
+	CurrentMTU uint16
+	// JLS END
 }
 
 func (c *Conn) ConnectionStats() ConnectionStats {
@@ -846,6 +862,9 @@ func (c *Conn) ConnectionStats() ConnectionStats {
 		PacketsReceived: c.connStats.PacketsReceived.Load(),
 		BytesLost:       c.connStats.BytesLost.Load(),
 		PacketsLost:     c.connStats.PacketsLost.Load(),
+		// JLS BEGIN: report the active path MTU to ShadowQUIC.
+		CurrentMTU: uint16(c.currentMTU.Load()),
+		// JLS END
 	}
 }
 
@@ -925,6 +944,9 @@ func (c *Conn) switchToNewPath(tr *Transport, now monotime.Time) {
 		maxPacketSize = c.peerParams.MaxUDPPayloadSize
 	}
 	c.mtuDiscoverer.Reset(now, initialPacketSize, maxPacketSize)
+	// JLS BEGIN: reset ShadowQUIC's active path MTU statistic after migration.
+	c.currentMTU.Store(uint32(initialPacketSize))
+	// JLS END
 	c.conn = newSendConn(tr.conn, c.conn.RemoteAddr(), packetInfo{}, utils.DefaultLogger) // TODO: find a better way
 	c.sendQueue.Close()
 	c.sendQueue = newSendQueue(c.conn)
@@ -1965,9 +1987,16 @@ func (c *Conn) handleFrame(
 // handlePacket is called by the server with a new packet
 func (c *Conn) handlePacket(p receivedPacket) {
 	c.receivedPacketMx.Lock()
+	canQueue := c.receivedPackets.Len() < protocol.MaxConnUnprocessedPackets
+	// JLS BEGIN: forward activated flows, but capture only packets quic-go can queue.
+	if c.handleJLSPacket(p, canQueue) {
+		c.receivedPacketMx.Unlock()
+		return
+	}
+	// JLS END
 	// Discard packets once the amount of queued packets is larger than
 	// the channel size, protocol.MaxConnUnprocessedPackets
-	if c.receivedPackets.Len() >= protocol.MaxConnUnprocessedPackets {
+	if !canQueue {
 		if c.qlogger != nil {
 			var datagramPayloadChecksum qlog.DatagramPayloadChecksum
 			if wire.IsLongHeaderPacket(p.data[0]) {
@@ -2019,6 +2048,9 @@ func (c *Conn) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.Encr
 		if err := c.cryptoStreamHandler.HandleMessage(data, encLevel); err != nil {
 			return err
 		}
+		// JLS BEGIN: discard captured datagrams when TLS authenticates JLS.
+		c.finishJLSAuthentication()
+		// JLS END
 	}
 	return c.handleHandshakeEvents(rcvTime)
 }
@@ -2142,6 +2174,9 @@ func (c *Conn) handleAckFrame(frame *wire.AckFrame, encLevel protocol.Encryption
 	// If one of the acknowledged packets was a Path MTU probe packet, this might have increased the Path MTU estimate.
 	if c.mtuDiscoverer != nil {
 		mtu := c.mtuDiscoverer.CurrentSize()
+		// JLS BEGIN: track PMTU updates for ShadowQUIC connection statistics.
+		c.currentMTU.Store(uint32(mtu))
+		// JLS END
 		maxPayloadSize := estimateMaxPayloadSize(mtu)
 		if maxPayloadSize > protocol.ByteCount(c.maxPayloadSizeEstimate.Load()) {
 			c.maxPayloadSizeEstimate.Store(uint32(maxPayloadSize))
@@ -2163,7 +2198,15 @@ func (c *Conn) handleDatagramFrame(f *wire.DatagramFrame) error {
 }
 
 func (c *Conn) setCloseError(e *closeError) {
-	c.closeErr.CompareAndSwap(nil, e)
+	// JLS BEGIN: authentication failures switch to camouflage forwarding without a QUIC close.
+	jlsAuthFailed := errors.Is(e.err, tls.ErrJLSAuthFailed)
+	if jlsAuthFailed {
+		e.immediate = true
+	}
+	if c.closeErr.CompareAndSwap(nil, e) && jlsAuthFailed {
+		c.forwardJLSAuthenticationFailure()
+	}
+	// JLS END
 	select {
 	case c.closeChan <- struct{}{}:
 	default:

@@ -3,10 +3,12 @@ package quic
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"github.com/metacubex/jls-tls"
 	"golang.org/x/exp/slices"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,9 +28,11 @@ import (
 
 type testServer struct{ *baseServer }
 
+// JLS BEGIN: extend server test setup with per-test JLS TLS configuration.
 type serverOpts struct {
 	eventRecorder             *events.Recorder
 	config                    *Config
+	tlsConfig                 *tls.Config
 	tokenGeneratorKey         TokenGeneratorKey
 	maxTokenAge               time.Duration
 	useRetry                  bool
@@ -57,21 +61,29 @@ type serverOpts struct {
 	) *wrappedConn
 }
 
+// JLS END
+
 func newTestServer(t *testing.T, serverOpts *serverOpts) *testServer {
 	t.Helper()
 	c, err := wrapConn(newUDPConnLocalhost(t))
 	require.NoError(t, err)
 	verifySourceAddress := func(net.Addr) bool { return serverOpts.useRetry }
 	config := populateConfig(serverOpts.config)
+	// JLS BEGIN: allow server tests to exercise JLS and its stateless reset setup.
+	tlsConfig := serverOpts.tlsConfig
+	if tlsConfig == nil {
+		tlsConfig = &tls.Config{}
+	}
+	resetter := newStatelessResetter(nil)
 	tr := &Transport{Conn: newUDPConnLocalhost(t)}
 	tr.init(true)
 	s := newServer(
 		c,
 		(*packetHandlerMap)(tr),
 		&protocol.DefaultConnectionIDGenerator{},
-		&statelessResetter{},
+		resetter,
 		func(ctx context.Context, _ *ClientInfo) (context.Context, error) { return ctx, nil },
-		&tls.Config{},
+		tlsConfig,
 		config,
 		serverOpts.eventRecorder,
 		func() {},
@@ -81,6 +93,7 @@ func newTestServer(t *testing.T, serverOpts *serverOpts) *testServer {
 		serverOpts.disableVersionNegotiation,
 		serverOpts.acceptEarly,
 	)
+	// JLS END
 	s.newConn = serverOpts.newConn
 	t.Cleanup(func() { s.Close() })
 	return &testServer{s}
@@ -238,6 +251,22 @@ func TestServerPacketDropping(t *testing.T) {
 		)
 	})
 
+	t.Run("JLS destination connection ID too short", func(t *testing.T) {
+		// JLS BEGIN: quinn-jls sends an Initial close for an invalid client DCID.
+		conn := newUDPConnLocalhost(t)
+		srcConnID := randConnID(7)
+		destConnID := randConnID(5)
+		var eventRecorder events.Recorder
+		server := newTestServer(t, &serverOpts{
+			eventRecorder: &eventRecorder,
+			config:        &Config{JLSConfig: &JLSConfig{}},
+		})
+
+		server.handlePacket(getValidInitialPacket(t, conn.LocalAddr(), srcConnID, destConnID))
+		checkConnectionClose(t, conn, &eventRecorder, destConnID, srcConnID, qerr.ProtocolViolation)
+		// JLS END
+	})
+
 	t.Run("Initial packet too small", func(t *testing.T) {
 		conn := newUDPConnLocalhost(t)
 		p := getLongHeaderPacket(t,
@@ -384,6 +413,154 @@ func TestServerVersionNegotiation(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		testServerVersionNegotiation(t, false)
 	})
+	// JLS BEGIN: custom and lazy camouflage Version Negotiation profiles.
+	t.Run("custom versions", func(t *testing.T) {
+		conn := newUDPConnLocalhost(t)
+		var eventRecorder events.Recorder
+		vnVersions := []Version{protocol.Version1, protocol.Version2, 0xff00001d, 0xabcd0000}
+		server := newTestServer(t, &serverOpts{
+			eventRecorder: &eventRecorder,
+			config: &Config{
+				Versions: []Version{protocol.Version1},
+				JLSConfig: &JLSConfig{
+					VersionNegotiationVersions: []Version{protocol.Version1, protocol.Version2, 0xff00001d, 0xabcd0000},
+				},
+			},
+		})
+
+		srcConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5})
+		destConnID := protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6})
+		packet := getLongHeaderPacket(t, conn.LocalAddr(),
+			&wire.ExtendedHeader{
+				Header: wire.Header{
+					Type:             protocol.PacketTypeHandshake,
+					SrcConnectionID:  srcConnID,
+					DestConnectionID: destConnID,
+					Version:          0x42,
+				},
+				PacketNumberLen: protocol.PacketNumberLen4,
+			},
+			make([]byte, protocol.MinUnknownVersionPacketSize),
+		)
+
+		written := make(chan []byte, 1)
+		go func() {
+			b := make([]byte, 1500)
+			n, _, _ := conn.ReadFrom(b)
+			written <- b[:n]
+		}()
+		server.handlePacket(packet)
+
+		select {
+		case b := <-written:
+			require.True(t, wire.IsVersionNegotiationPacket(b))
+			_, _, versions, err := wire.ParseVersionNegotiationPacket(b)
+			require.NoError(t, err)
+			require.Subset(t, versions, vnVersions)
+			require.NotContains(t, versions, protocol.Version(0x42))
+		case <-time.After(time.Second):
+			t.Fatal("timeout")
+		}
+
+		events := eventRecorder.Events(qlog.VersionNegotiationSent{})
+		require.Len(t, events, 1)
+		ev, ok := events[0].(qlog.VersionNegotiationSent)
+		require.True(t, ok)
+		require.Equal(t, vnVersions, ev.SupportedVersions)
+	})
+	t.Run("lazy profile", func(t *testing.T) {
+		conn := newUDPConnLocalhost(t)
+		var eventRecorder events.Recorder
+		vnVersions := []Version{protocol.Version1, protocol.Version2, 0xff00001d}
+		var called atomic.Bool
+		server := newTestServer(t, &serverOpts{
+			eventRecorder: &eventRecorder,
+			config: &Config{
+				Versions: []Version{protocol.Version1},
+				JLSConfig: &JLSConfig{
+					VersionNegotiationVersions: []Version{protocol.Version1},
+					GetVersionNegotiationProfile: func() ([]Version, []Version) {
+						called.Store(true)
+						return []Version{protocol.Version1}, vnVersions
+					},
+				},
+			},
+		})
+
+		packet := getLongHeaderPacket(t, conn.LocalAddr(),
+			&wire.ExtendedHeader{
+				Header: wire.Header{
+					Type:             protocol.PacketTypeHandshake,
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5}),
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6}),
+					Version:          0x42,
+				},
+				PacketNumberLen: protocol.PacketNumberLen4,
+			},
+			make([]byte, protocol.MinUnknownVersionPacketSize),
+		)
+
+		written := make(chan []byte, 1)
+		go func() {
+			b := make([]byte, 1500)
+			n, _, _ := conn.ReadFrom(b)
+			written <- b[:n]
+		}()
+		server.handlePacket(packet)
+
+		select {
+		case b := <-written:
+			require.True(t, wire.IsVersionNegotiationPacket(b))
+			_, _, versions, err := wire.ParseVersionNegotiationPacket(b)
+			require.NoError(t, err)
+			require.Subset(t, versions, vnVersions)
+			require.True(t, called.Load())
+		case <-time.After(time.Second):
+			t.Fatal("timeout")
+		}
+	})
+	t.Run("JLS legacy draft", func(t *testing.T) {
+		conn := newUDPConnLocalhost(t)
+		var dialCount atomic.Int32
+		var eventRecorder events.Recorder
+		server := newTestServer(t, &serverOpts{
+			eventRecorder: &eventRecorder,
+			config: &Config{
+				Versions: []Version{protocol.Version1},
+				JLSConfig: &JLSConfig{
+					UpstreamAddr:               "127.0.0.1:443",
+					VersionNegotiationVersions: []Version{protocol.Version1, protocol.Version2},
+					PacketDialer: func(context.Context, string, string) (net.PacketConn, net.Addr, error) {
+						dialCount.Add(1)
+						return nil, nil, nil
+					},
+				},
+			},
+			tlsConfig: &tls.Config{JLSConfig: &tls.JLSConfig{
+				Enable: true,
+				Users:  []tls.JLSUser{{Username: "user", Password: "password"}},
+			}},
+		})
+
+		packet := getLongHeaderPacket(t, conn.LocalAddr(), &wire.ExtendedHeader{
+			Header: wire.Header{
+				Type:             protocol.PacketTypeInitial,
+				SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5}),
+				DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6, 7, 8}),
+				Version:          0xff00001d,
+			},
+			PacketNumberLen: protocol.PacketNumberLen4,
+		}, make([]byte, protocol.MinUnknownVersionPacketSize))
+
+		server.handlePacket(packet)
+		require.NoError(t, conn.SetReadDeadline(time.Now().Add(time.Second)))
+		b := make([]byte, 1500)
+		n, _, err := conn.ReadFrom(b)
+		require.NoError(t, err)
+		require.True(t, wire.IsVersionNegotiationPacket(b[:n]))
+		require.Zero(t, dialCount.Load())
+	})
+	// JLS END
 }
 
 func testServerVersionNegotiation(t *testing.T, enabled bool) {
@@ -573,7 +750,217 @@ func TestServerTokenValidation(t *testing.T) {
 		time.Sleep(3 * time.Millisecond) // make sure the token is expired
 		testServerTokenValidation(t, server, &eventRecorder, conn, token, false, false, true)
 	})
+	// JLS BEGIN: verify the exact camouflage Version Negotiation profile.
+	t.Run("JLS exact profile", func(t *testing.T) {
+		conn := newUDPConnLocalhost(t)
+		var eventRecorder events.Recorder
+		vnVersions := []Version{jlsDefaultGreaseVersion, protocol.Version1, 0xff00001d}
+		server := newTestServer(t, &serverOpts{
+			eventRecorder: &eventRecorder,
+			config: &Config{
+				Versions: []Version{protocol.Version1},
+				JLSConfig: &JLSConfig{
+					UpstreamAddr:               "127.0.0.1:443",
+					VersionNegotiationVersions: vnVersions,
+					PacketDialer: func(context.Context, string, string) (net.PacketConn, net.Addr, error) {
+						return nil, nil, errors.New("unexpected forwarding")
+					},
+				},
+			},
+			tlsConfig: &tls.Config{JLSConfig: &tls.JLSConfig{
+				Enable: true,
+				Users:  []tls.JLSUser{{Username: "user", Password: "password"}},
+			}},
+		})
+
+		packet := getLongHeaderPacket(t, conn.LocalAddr(),
+			&wire.ExtendedHeader{
+				Header: wire.Header{
+					Type:             protocol.PacketTypeHandshake,
+					SrcConnectionID:  protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5}),
+					DestConnectionID: protocol.ParseConnectionID([]byte{1, 2, 3, 4, 5, 6}),
+					Version:          0x42,
+				},
+				PacketNumberLen: protocol.PacketNumberLen4,
+			},
+			make([]byte, protocol.MinUnknownVersionPacketSize),
+		)
+
+		written := make(chan []byte, 1)
+		go func() {
+			b := make([]byte, 1500)
+			n, _, _ := conn.ReadFrom(b)
+			written <- b[:n]
+		}()
+		server.handlePacket(packet)
+		select {
+		case b := <-written:
+			_, _, versions, err := wire.ParseVersionNegotiationPacket(b)
+			require.NoError(t, err)
+			require.Equal(t, vnVersions, versions)
+		case <-time.After(time.Second):
+			t.Fatal("timeout")
+		}
+	})
+	// JLS END
 }
+
+// JLS BEGIN: forwarding behavior after endpoint and TLS validation.
+func TestJLSServerValidatesTokenBeforeForwarding(t *testing.T) {
+	makeServer := func(t *testing.T, dialCount *atomic.Int32, useRetry bool) (*testServer, *events.Recorder) {
+		t.Helper()
+		eventRecorder := &events.Recorder{}
+		return newTestServer(t, &serverOpts{
+			eventRecorder: eventRecorder,
+			newConn:       newConnection,
+			config: &Config{JLSConfig: &JLSConfig{
+				UpstreamAddr: "127.0.0.1:443",
+				PacketDialer: func(context.Context, string, string) (net.PacketConn, net.Addr, error) {
+					dialCount.Add(1)
+					return nil, nil, nil
+				},
+			}},
+			tlsConfig: &tls.Config{JLSConfig: &tls.JLSConfig{
+				Enable: true,
+				Users:  []tls.JLSUser{{Username: "user", Password: "password"}},
+			}},
+			useRetry: useRetry,
+		}), eventRecorder
+	}
+	makePacket := func(t *testing.T, token []byte) receivedPacket {
+		t.Helper()
+		clientHello, err := getClientHello("example.com")
+		require.NoError(t, err)
+		data := composeJLSInitialPacketWithToken(
+			t,
+			protocol.Version1,
+			[]byte{1, 2, 3, 4, 5, 6, 7, 8},
+			clientHello,
+			token,
+		)
+		if len(data) < protocol.MinInitialPacketSize {
+			data = append(data, make([]byte, protocol.MinInitialPacketSize-len(data))...)
+		}
+		buf := getLargePacketBuffer()
+		buf.Data = append(buf.Data, data...)
+		return receivedPacket{
+			data:       buf.Data,
+			buffer:     buf,
+			remoteAddr: newUDPConnLocalhost(t).LocalAddr(),
+		}
+	}
+
+	t.Run("no token", func(t *testing.T) {
+		var dialCount atomic.Int32
+		server, _ := makeServer(t, &dialCount, false)
+		server.handlePacket(makePacket(t, nil))
+		require.Eventually(t, func() bool { return dialCount.Load() == 1 }, time.Second, time.Millisecond)
+	})
+
+	t.Run("undecodable token with retry", func(t *testing.T) {
+		var dialCount atomic.Int32
+		server, eventRecorder := makeServer(t, &dialCount, true)
+		server.handlePacket(makePacket(t, []byte("invalid token")))
+		require.Eventually(t, func() bool {
+			return len(eventRecorder.Events(qlog.PacketSent{})) > 0
+		}, time.Second, time.Millisecond)
+		require.Equal(t, int32(0), dialCount.Load())
+	})
+
+	t.Run("undecodable token without retry", func(t *testing.T) {
+		var dialCount atomic.Int32
+		server, _ := makeServer(t, &dialCount, false)
+		server.handlePacket(makePacket(t, []byte("invalid token")))
+		require.Eventually(t, func() bool { return dialCount.Load() == 1 }, time.Second, time.Millisecond)
+	})
+}
+
+func TestJLSServerForwardsOriginalDatagramsAfterTLSAuthFailure(t *testing.T) {
+	upstream, err := net.ListenPacket("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer upstream.Close()
+
+	server := newTestServer(t, &serverOpts{
+		newConn: newConnection,
+		config: &Config{JLSConfig: &JLSConfig{
+			UpstreamAddr: upstream.LocalAddr().String(),
+			PacketDialer: testJLSDialer(t, upstream),
+		}},
+		tlsConfig: &tls.Config{JLSConfig: &tls.JLSConfig{
+			Enable: true,
+			Users:  []tls.JLSUser{{Username: "user", Password: "password"}},
+		}},
+	})
+
+	clientConn := newUDPConnLocalhost(t)
+	defer clientConn.Close()
+	clientHello, err := getClientHello("example.com")
+	require.NoError(t, err)
+	dcid := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+	split := len(clientHello) / 2
+	first := composeJLSInitialPacketWithOffsetAndNumber(t, protocol.Version1, dcid, clientHello[:split], 0, 1)
+	second := composeJLSInitialPacketWithOffsetAndNumber(t, protocol.Version1, dcid, clientHello[split:], protocol.ByteCount(split), 2)
+	if len(first) < protocol.MinInitialPacketSize {
+		first = append(first, make([]byte, protocol.MinInitialPacketSize-len(first))...)
+	}
+	if len(second) < protocol.MinInitialPacketSize {
+		second = append(second, make([]byte, protocol.MinInitialPacketSize-len(second))...)
+	}
+
+	server.handlePacket(newJLSReceivedPacket(first, clientConn.LocalAddr()))
+	server.handlePacket(newJLSReceivedPacket(second, clientConn.LocalAddr()))
+
+	require.NoError(t, upstream.SetReadDeadline(time.Now().Add(time.Second)))
+	buf := make([]byte, protocol.MaxPacketBufferSize)
+	for i, expected := range [][]byte{first, second} {
+		n, _, readErr := upstream.ReadFrom(buf)
+		require.NoError(t, readErr, "reading forwarded datagram %d", i)
+		require.Equal(t, expected, buf[:n])
+	}
+}
+
+func TestJLSServerForwardsAdvertisedUnsupportedVersion(t *testing.T) {
+	upstream, err := net.ListenPacket("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer upstream.Close()
+
+	const draftVersion = protocol.Version(0xff00001d)
+	server := newTestServer(t, &serverOpts{
+		newConn: newConnection,
+		config: &Config{
+			Versions: []Version{protocol.Version1},
+			JLSConfig: &JLSConfig{
+				UpstreamAddr:               upstream.LocalAddr().String(),
+				VersionNegotiationVersions: []Version{jlsDefaultGreaseVersion, protocol.Version1, draftVersion},
+				PacketDialer:               testJLSDialer(t, upstream),
+			},
+		},
+		tlsConfig: &tls.Config{JLSConfig: &tls.JLSConfig{
+			Enable: true,
+			Users:  []tls.JLSUser{{Username: "user", Password: "password"}},
+		}},
+	})
+
+	packet := make([]byte, protocol.MinUnknownVersionPacketSize)
+	packet[0] = 0xc0
+	binary.BigEndian.PutUint32(packet[1:5], uint32(draftVersion))
+	packet[5] = 8
+	copy(packet[6:14], []byte{1, 2, 3, 4, 5, 6, 7, 8})
+	packet[14] = 8
+	copy(packet[15:23], []byte{8, 7, 6, 5, 4, 3, 2, 1})
+	clientConn := newUDPConnLocalhost(t)
+	defer clientConn.Close()
+	remote := clientConn.LocalAddr()
+	server.handlePacket(newJLSReceivedPacket(packet, remote))
+
+	require.NoError(t, upstream.SetReadDeadline(time.Now().Add(time.Second)))
+	got := make([]byte, len(packet)+1)
+	n, _, err := upstream.ReadFrom(got)
+	require.NoError(t, err)
+	require.Equal(t, packet, got[:n])
+}
+
+// JLS END
 
 func testServerTokenValidation(
 	t *testing.T,

@@ -2,6 +2,7 @@ package quic
 
 import (
 	"context"
+	"net"
 	"reflect"
 	"testing"
 	"time"
@@ -90,6 +91,14 @@ func configWithNonZeroNonFunctionFields(t *testing.T) *Config {
 			// Can't compare functions.
 		case "Versions":
 			f.Set(reflect.ValueOf([]Version{1, 2, 3}))
+		// JLS BEGIN: account for the nested JLS configuration.
+		case "JLSConfig":
+			f.Set(reflect.ValueOf(&JLSConfig{
+				UpstreamAddr:               "127.0.0.1:443",
+				RateLimit:                  1024,
+				VersionNegotiationVersions: []Version{1, 2, 3, 4},
+			}))
+		// JLS END
 		case "ConnectionIDLength":
 			f.Set(reflect.ValueOf(8))
 		case "ConnectionIDGenerator":
@@ -142,9 +151,24 @@ func configWithNonZeroNonFunctionFields(t *testing.T) *Config {
 func TestConfigClone(t *testing.T) {
 	t.Run("function fields", func(t *testing.T) {
 		var calledAllowConnectionWindowIncrease, calledTracer bool
+		// JLS BEGIN: verify JLS callbacks survive Config.Clone.
+		var calledJLSPacketDialer, calledGetVersionNegotiationProfile bool
+		// JLS END
 		c1 := &Config{
 			GetConfigForClient:            func(info *ClientInfo) (*Config, error) { return nil, assert.AnError },
 			AllowConnectionWindowIncrease: func(*Conn, uint64) bool { calledAllowConnectionWindowIncrease = true; return true },
+			// JLS BEGIN: JLS callback fields under test.
+			JLSConfig: &JLSConfig{
+				PacketDialer: func(context.Context, string, string) (net.PacketConn, net.Addr, error) {
+					calledJLSPacketDialer = true
+					return nil, nil, assert.AnError
+				},
+				GetVersionNegotiationProfile: func() ([]Version, []Version) {
+					calledGetVersionNegotiationProfile = true
+					return []Version{protocol.Version1}, []Version{protocol.Version1}
+				},
+			},
+			// JLS END
 			Tracer: func(context.Context, bool, ConnectionID) qlogwriter.Trace {
 				calledTracer = true
 				return nil
@@ -155,6 +179,15 @@ func TestConfigClone(t *testing.T) {
 		require.True(t, calledAllowConnectionWindowIncrease)
 		_, err := c2.GetConfigForClient(&ClientInfo{})
 		require.ErrorIs(t, err, assert.AnError)
+		// JLS BEGIN: invoke and verify cloned JLS callbacks.
+		_, _, err = c2.JLSConfig.PacketDialer(context.Background(), "udp", "127.0.0.1:443")
+		require.ErrorIs(t, err, assert.AnError)
+		require.True(t, calledJLSPacketDialer)
+		versions, vnVersions := c2.JLSConfig.GetVersionNegotiationProfile()
+		require.Equal(t, []Version{protocol.Version1}, versions)
+		require.Equal(t, []Version{protocol.Version1}, vnVersions)
+		require.True(t, calledGetVersionNegotiationProfile)
+		// JLS END
 		c2.Tracer(context.Background(), true, protocol.ConnectionID{})
 		require.True(t, calledTracer)
 	})

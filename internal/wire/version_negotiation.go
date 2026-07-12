@@ -34,7 +34,20 @@ func ParseVersionNegotiationPacket(b []byte) (dest, src protocol.ArbitraryLenCon
 // ComposeVersionNegotiation composes a Version Negotiation
 func ComposeVersionNegotiation(destConnID, srcConnID protocol.ArbitraryLenConnectionID, versions []protocol.Version) []byte {
 	greasedVersions := protocol.GetGreasedVersions(versions)
-	expectedLen := 1 /* type byte */ + 4 /* version field */ + 1 /* dest connection ID length field */ + destConnID.Len() + 1 /* src connection ID length field */ + srcConnID.Len() + len(greasedVersions)*4
+	// JLS BEGIN: share packet encoding with the exact camouflage profile variant.
+	return composeVersionNegotiation(destConnID, srcConnID, greasedVersions)
+	// JLS END
+}
+
+// JLS BEGIN: preserve the camouflage target's exact Version Negotiation profile.
+// ComposeVersionNegotiationExact composes a Version Negotiation packet with
+// exactly the supplied version profile. Callers are responsible for GREASE.
+func ComposeVersionNegotiationExact(destConnID, srcConnID protocol.ArbitraryLenConnectionID, versions []protocol.Version) []byte {
+	return composeVersionNegotiation(destConnID, srcConnID, versions)
+}
+
+func composeVersionNegotiation(destConnID, srcConnID protocol.ArbitraryLenConnectionID, versions []protocol.Version) []byte {
+	expectedLen := 1 /* type byte */ + 4 /* version field */ + 1 /* dest connection ID length field */ + destConnID.Len() + 1 /* src connection ID length field */ + srcConnID.Len() + len(versions)*4
 	buf := make([]byte, 1+4 /* type byte and version field */, expectedLen)
 	_, _ = rand.Read(buf[:1]) // ignore the error here. It is not critical to have perfect random here.
 	// Setting the "QUIC bit" (0x40) is not required by the RFC,
@@ -46,8 +59,10 @@ func ComposeVersionNegotiation(destConnID, srcConnID protocol.ArbitraryLenConnec
 	buf = append(buf, destConnID.Bytes()...)
 	buf = append(buf, uint8(srcConnID.Len()))
 	buf = append(buf, srcConnID.Bytes()...)
-	for _, v := range greasedVersions {
+	for _, v := range versions {
 		buf = binary.BigEndian.AppendUint32(buf, uint32(v))
 	}
 	return buf
 }
+
+// JLS END

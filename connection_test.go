@@ -35,6 +35,15 @@ import (
 
 type testConnectionOpt func(*Conn)
 
+// JLS BEGIN: verify the active path MTU exposed to ShadowQUIC.
+func TestConnectionStatsReportsCurrentMTU(t *testing.T) {
+	conn := &Conn{rttStats: utils.NewRTTStats()}
+	conn.currentMTU.Store(1400)
+	require.Equal(t, uint16(1400), conn.ConnectionStats().CurrentMTU)
+}
+
+// JLS END
+
 func connectionOptCryptoSetup(cs *mocks.MockCryptoSetup) testConnectionOpt {
 	return func(conn *Conn) { conn.cryptoStreamHandler = cs }
 }

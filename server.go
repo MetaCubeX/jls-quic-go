@@ -54,6 +54,9 @@ type baseServer struct {
 	config  *Config
 
 	conn rawConn
+	// JLS BEGIN: internal JLS camouflage forwarder.
+	jlsForwarder *jlsForwarder
+	// JLS END
 
 	tokenGenerator *handshake.TokenGenerator
 	maxTokenAge    time.Duration
@@ -279,6 +282,9 @@ func newServer(
 		disableVersionNegotiation: disableVersionNegotiation,
 		onClose:                   onClose,
 	}
+	// JLS BEGIN: initialize forwarding inside the QUIC endpoint instead of wrapping PacketConn.
+	s.jlsForwarder = newJLSForwarder(conn, config.JLSConfig)
+	// JLS END
 	if acceptEarly {
 		s.zeroRTTQueues = map[protocol.ConnectionID]*zeroRTTQueue{}
 	}
@@ -363,6 +369,11 @@ func (s *baseServer) close(e error, transportClose bool) {
 	s.closeErr = e
 	close(s.errorChan)
 	<-s.running
+	// JLS BEGIN: close all camouflage forwarding sockets with the server.
+	if s.jlsForwarder != nil {
+		s.jlsForwarder.Close()
+	}
+	// JLS END
 	s.closeMx.Unlock()
 
 	if !transportClose {
@@ -439,8 +450,11 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		}
 		return false
 	}
+	// JLS BEGIN: apply the camouflage target's lazily resolved version profile.
+	versions, versionNegotiationVersions := s.config.quicVersionProfile()
+	versionSupported := protocol.IsSupportedVersion(versions, v)
 	// send a Version Negotiation Packet if the client is speaking a different protocol version
-	if !protocol.IsSupportedVersion(s.config.Versions, v) {
+	if !versionSupported {
 		if s.disableVersionNegotiation {
 			if s.qlogger != nil {
 				s.qlogger.RecordEvent(qlog.PacketDropped{
@@ -463,8 +477,17 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 			}
 			return false
 		}
+		if s.jlsForwarder != nil &&
+			protocol.IsSupportedVersion(versionNegotiationVersions, v) &&
+			!isReservedQUICVersion(v) &&
+			s.jlsForwarder.handleCamouflageVersionPacket(p) {
+			// The camouflage profile advertised this version, but this QUIC stack
+			// can't decode it. Let the real upstream produce the observable result.
+			return false
+		}
 		return s.enqueueVersionNegotiationPacket(p)
 	}
+	// JLS END
 
 	if wire.Is0RTTPacket(p.data) {
 		if !s.acceptEarlyConns {
@@ -689,6 +712,14 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			})
 		}
+		// JLS BEGIN: quinn-jls answers invalid Initial DCIDs with an Initial close.
+		if s.config.JLSConfig != nil {
+			sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer, hdr.Version)
+			if err := s.sendError(p.remoteAddr, hdr, sealer, ProtocolViolation, p.info); err != nil {
+				s.logger.Debugf("Error sending PROTOCOL_VIOLATION error: %s", err)
+			}
+		}
+		// JLS END
 		p.buffer.Release()
 		return errors.New("too short connection ID")
 	}
@@ -835,6 +866,11 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		s.logger,
 		hdr.Version,
 	)
+	// JLS BEGIN: let quic-go and TLS decide authentication before forwarding.
+	if conn.Conn != nil {
+		conn.enableJLSForwarding(s.jlsForwarder)
+	}
+	// JLS END
 	conn.handlePacket(p)
 	// Adding the connection will fail if the client's chosen Destination Connection ID is already in use.
 	// This is very unlikely: Even if an attacker chooses a connection ID that's already in use,
@@ -1107,17 +1143,62 @@ func (s *baseServer) maybeSendVersionNegotiationPacket(p receivedPacket) {
 
 	s.logger.Debugf("Client offered version %s, sending Version Negotiation", v)
 
-	data := wire.ComposeVersionNegotiation(dest, src, s.config.Versions)
+	// JLS BEGIN: advertise the camouflage target's Version Negotiation profile.
+	_, versions := s.config.quicVersionProfile()
+	var data []byte
+	if s.jlsForwarder != nil {
+		versions = jlsVersionNegotiationProfile(v, versions)
+		data = wire.ComposeVersionNegotiationExact(dest, src, versions)
+	} else {
+		data = wire.ComposeVersionNegotiation(dest, src, versions)
+	}
 	if s.qlogger != nil {
 		s.qlogger.RecordEvent(qlog.VersionNegotiationSent{
 			Header: qlog.PacketHeaderVersionNegotiation{
 				SrcConnectionID:  src,
 				DestConnectionID: dest,
 			},
-			SupportedVersions: s.config.Versions,
+			SupportedVersions: versions,
 		})
 	}
+	// JLS END
 	if _, err := s.conn.WritePacket(data, p.remoteAddr, p.info.OOB(), 0, protocol.ECNUnsupported); err != nil {
 		s.logger.Debugf("Error sending Version Negotiation: %s", err)
 	}
 }
+
+// JLS BEGIN: reproduce the camouflage target's exact GREASE behavior.
+const (
+	jlsDefaultGreaseVersion protocol.Version = 0x0a1a2a3a
+	jlsGreaseVersionStep    protocol.Version = 0x10
+	jlsReservedVersionMask  protocol.Version = 0x0f0f0f0f
+	jlsReservedVersionValue protocol.Version = 0x0a0a0a0a
+)
+
+func isReservedQUICVersion(version protocol.Version) bool {
+	return version&jlsReservedVersionMask == jlsReservedVersionValue
+}
+
+func jlsVersionNegotiationProfile(offered protocol.Version, configured []protocol.Version) []protocol.Version {
+	versions := append([]protocol.Version(nil), configured...)
+	hasGrease := false
+	for i, version := range versions {
+		if !isReservedQUICVersion(version) {
+			continue
+		}
+		hasGrease = true
+		if version == offered {
+			versions[i] = version + jlsGreaseVersionStep
+		}
+	}
+	if !hasGrease {
+		grease := jlsDefaultGreaseVersion
+		if grease == offered {
+			grease += jlsGreaseVersionStep
+		}
+		versions = append([]protocol.Version{grease}, versions...)
+	}
+	return versions
+}
+
+// JLS END

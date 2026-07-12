@@ -90,6 +90,19 @@ versionLoop:
 	require.True(t, reservedVersion&0x0f0f0f0f == 0x0a0a0a0a) // check that it's a greased version number
 }
 
+// JLS BEGIN: verify exact camouflage Version Negotiation profiles are not rewritten.
+func TestComposeVersionNegotiationExact(t *testing.T) {
+	srcConnID := protocol.ArbitraryLenConnectionID{1, 2, 3}
+	destConnID := protocol.ArbitraryLenConnectionID{4, 5, 6}
+	versions := []protocol.Version{0x0a1a2a3a, protocol.Version1, 0xff00001d}
+	data := ComposeVersionNegotiationExact(destConnID, srcConnID, versions)
+	_, _, got, err := ParseVersionNegotiationPacket(data)
+	require.NoError(t, err)
+	require.Equal(t, versions, got)
+}
+
+// JLS END
+
 func BenchmarkComposeVersionNegotiationPacket(b *testing.B) {
 	b.ReportAllocs()
 

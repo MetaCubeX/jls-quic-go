@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/metacubex/http v0.1.0
-	github.com/metacubex/jls-tls v0.0.0-20260712085721-6ea48ea9f069
+	github.com/metacubex/jls-tls v0.0.0-20260716010121-e13c4e54a728
 	github.com/metacubex/qpack v0.6.0
 	github.com/metacubex/randv2 v0.2.0
 	github.com/metacubex/tls v0.1.6

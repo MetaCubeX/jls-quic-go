@@ -2,9 +2,6 @@ package quic
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
 	"net"
 	"sync"
 	"time"
@@ -16,18 +13,11 @@ import (
 // JLS BEGIN: JLS camouflage forwarding support.
 
 const (
-	jlsRateLimitCycle            = 10 * time.Millisecond
-	jlsForwardIdleTimeout        = 2 * time.Minute
-	jlsForwardRecvBufferSize     = 32 * 32 * 1024
-	jlsMaxCapturedPackets        = 32
-	jlsMaxCapturedBytes          = 64 << 10
-	jlsDefaultConnectionIDLen    = 8
-	jlsConnectionIDSignatureLen  = 5
-	jlsStatelessResetMinPadding  = 5
-	jlsStatelessResetTokenLen    = 16
-	jlsMaxConnectionIDLen        = 20
-	jlsMinStatelessResetSize     = jlsStatelessResetMinPadding + jlsStatelessResetTokenLen
-	jlsMinStatelessResetInterval = 20 * time.Millisecond
+	jlsRateLimitBurstPeriod  = 10 * time.Millisecond
+	jlsForwardIdleTimeout    = 2 * time.Minute
+	jlsForwardRecvBufferSize = 32 * 32 * 1024
+	jlsMaxCapturedPackets    = 32
+	jlsMaxCapturedBytes      = 64 << 10
 )
 
 type jlsForwarder struct {
@@ -70,61 +60,6 @@ type jlsForwardCapture struct {
 	packets    [][]byte
 	bytes      int
 	overflow   bool
-}
-
-type jlsConnectionIDGenerator struct {
-	connLen int
-	key     [32]byte
-}
-
-type jlsConnectionIDValidator interface {
-	ValidateConnectionID(protocol.ConnectionID) bool
-}
-
-func newJLSConnectionIDGenerator(connLen int) *jlsConnectionIDGenerator {
-	generator := &jlsConnectionIDGenerator{connLen: connLen}
-	_, _ = rand.Read(generator.key[:])
-	return generator
-}
-
-func (g *jlsConnectionIDGenerator) GenerateConnectionID() (ConnectionID, error) {
-	if g.connLen == 0 {
-		return protocol.ConnectionID{}, nil
-	}
-	nonceLen := g.nonceLen()
-	connID := make([]byte, g.connLen)
-	if _, err := rand.Read(connID[:nonceLen]); err != nil {
-		return protocol.ConnectionID{}, err
-	}
-	g.sign(connID[nonceLen:], connID[:nonceLen])
-	return protocol.ParseConnectionID(connID), nil
-}
-
-func (g *jlsConnectionIDGenerator) ConnectionIDLen() int { return g.connLen }
-
-func (g *jlsConnectionIDGenerator) ValidateConnectionID(connID protocol.ConnectionID) bool {
-	if connID.Len() != g.connLen || g.connLen < 2 {
-		return false
-	}
-	b := connID.Bytes()
-	nonceLen := g.nonceLen()
-	expected := make([]byte, g.connLen-nonceLen)
-	g.sign(expected, b[:nonceLen])
-	return hmac.Equal(expected, b[nonceLen:])
-}
-
-func (g *jlsConnectionIDGenerator) nonceLen() int {
-	signatureLen := jlsConnectionIDSignatureLen
-	if signatureLen >= g.connLen {
-		signatureLen = g.connLen - 1
-	}
-	return g.connLen - signatureLen
-}
-
-func (g *jlsConnectionIDGenerator) sign(dst, nonce []byte) {
-	mac := hmac.New(sha256.New, g.key[:])
-	_, _ = mac.Write(nonce)
-	copy(dst, mac.Sum(nil))
 }
 
 func newJLSForwarder(conn rawConn, cfg *JLSConfig) *jlsForwarder {
@@ -270,18 +205,6 @@ func (f *jlsForwarder) handleForwardedClientPacket(p receivedPacket) bool {
 	return true
 }
 
-func (f *jlsForwarder) handleMigratedClientPacket(p receivedPacket) bool {
-	if f == nil || !f.hasForwardConns() {
-		return false
-	}
-	fwd := f.newForwardConn(p)
-	if fwd != nil {
-		f.writeToUpstream(fwd, p.data)
-	}
-	p.buffer.Release()
-	return true
-}
-
 func (f *jlsForwarder) handleCamouflageVersionPacket(p receivedPacket) bool {
 	if f == nil {
 		return false
@@ -298,12 +221,6 @@ func (f *jlsForwarder) getForwardConn(clientAddr net.Addr) *jlsForwardConn {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.conns[jlsAddrKey(clientAddr)]
-}
-
-func (f *jlsForwarder) hasForwardConns() bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.conns) > 0
 }
 
 func (f *jlsForwarder) activateForwardCapture(capture *jlsForwardCapture) {
@@ -468,46 +385,54 @@ func (f *jlsForwardConn) idleFor(t time.Time) time.Duration {
 }
 
 type jlsRateLimiter struct {
-	mu            sync.Mutex
-	unlimited     bool
-	bytesPerCycle int
-	handled       int
-	lastCycle     time.Time
+	mu                 sync.Mutex
+	unlimited          bool
+	rateBytesPerSecond float64
+	burst              float64
+	available          float64
+	last               time.Time
 }
 
 func newJLSRateLimiter(rateBps uint64) *jlsRateLimiter {
 	if rateBps == 0 {
 		return &jlsRateLimiter{unlimited: true}
 	}
-	cycleMillis := uint64(jlsRateLimitCycle / time.Millisecond)
-	cappedRate := rateBps
-	if cappedRate > ^uint64(0)/cycleMillis {
-		cappedRate = ^uint64(0) / cycleMillis
+	rateBytesPerSecond := float64(rateBps) / 8
+	burst := rateBytesPerSecond * jlsRateLimitBurstPeriod.Seconds()
+	if burst < protocol.MaxPacketBufferSize {
+		burst = protocol.MaxPacketBufferSize
 	}
-	bytesPerCycle := cappedRate * cycleMillis / (1000 * 8)
-	maxInt := uint64(^uint(0) >> 1)
-	if bytesPerCycle > maxInt {
-		bytesPerCycle = maxInt
+	now := time.Now()
+	return &jlsRateLimiter{
+		rateBytesPerSecond: rateBytesPerSecond,
+		burst:              burst,
+		available:          burst,
+		last:               now,
 	}
-	return &jlsRateLimiter{bytesPerCycle: int(bytesPerCycle), lastCycle: time.Now()}
 }
 
 func (l *jlsRateLimiter) allow(n int) bool {
+	return l.allowAt(n, time.Now())
+}
+
+func (l *jlsRateLimiter) allowAt(n int, now time.Time) bool {
 	if l == nil || l.unlimited {
 		return true
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	now := time.Now()
-	if now.Sub(l.lastCycle) >= jlsRateLimitCycle {
-		l.handled = 0
-		l.lastCycle = now
+	if elapsed := now.Sub(l.last).Seconds(); elapsed > 0 {
+		l.available += elapsed * l.rateBytesPerSecond
+		if l.available > l.burst {
+			l.available = l.burst
+		}
+		l.last = now
 	}
-	if l.handled+n > l.bytesPerCycle {
+	if float64(n) > l.available {
 		return false
 	}
-	l.handled += n
+	l.available -= float64(n)
 	return true
 }
 

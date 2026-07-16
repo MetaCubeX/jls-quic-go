@@ -251,22 +251,6 @@ func TestServerPacketDropping(t *testing.T) {
 		)
 	})
 
-	t.Run("JLS destination connection ID too short", func(t *testing.T) {
-		// JLS BEGIN: quinn-jls sends an Initial close for an invalid client DCID.
-		conn := newUDPConnLocalhost(t)
-		srcConnID := randConnID(7)
-		destConnID := randConnID(5)
-		var eventRecorder events.Recorder
-		server := newTestServer(t, &serverOpts{
-			eventRecorder: &eventRecorder,
-			config:        &Config{JLSConfig: &JLSConfig{}},
-		})
-
-		server.handlePacket(getValidInitialPacket(t, conn.LocalAddr(), srcConnID, destConnID))
-		checkConnectionClose(t, conn, &eventRecorder, destConnID, srcConnID, qerr.ProtocolViolation)
-		// JLS END
-	})
-
 	t.Run("Initial packet too small", func(t *testing.T) {
 		conn := newUDPConnLocalhost(t)
 		p := getLongHeaderPacket(t,
@@ -754,7 +738,7 @@ func TestServerTokenValidation(t *testing.T) {
 	t.Run("JLS exact profile", func(t *testing.T) {
 		conn := newUDPConnLocalhost(t)
 		var eventRecorder events.Recorder
-		vnVersions := []Version{jlsDefaultGreaseVersion, protocol.Version1, 0xff00001d}
+		vnVersions := []Version{protocol.Version1}
 		server := newTestServer(t, &serverOpts{
 			eventRecorder: &eventRecorder,
 			config: &Config{
@@ -916,19 +900,22 @@ func TestJLSServerForwardsOriginalDatagramsAfterTLSAuthFailure(t *testing.T) {
 	}
 }
 
-func TestJLSServerForwardsAdvertisedUnsupportedVersion(t *testing.T) {
+func TestJLSServerForwardsAdvertisedUnsupportedVersions(t *testing.T) {
 	upstream, err := net.ListenPacket("udp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer upstream.Close()
 
-	const draftVersion = protocol.Version(0xff00001d)
+	const (
+		reservedVersion = protocol.Version(0x0a1a2a3a)
+		draftVersion    = protocol.Version(0xff00001d)
+	)
 	server := newTestServer(t, &serverOpts{
 		newConn: newConnection,
 		config: &Config{
 			Versions: []Version{protocol.Version1},
 			JLSConfig: &JLSConfig{
 				UpstreamAddr:               upstream.LocalAddr().String(),
-				VersionNegotiationVersions: []Version{jlsDefaultGreaseVersion, protocol.Version1, draftVersion},
+				VersionNegotiationVersions: []Version{reservedVersion, protocol.Version1, draftVersion},
 				PacketDialer:               testJLSDialer(t, upstream),
 			},
 		},
@@ -938,23 +925,25 @@ func TestJLSServerForwardsAdvertisedUnsupportedVersion(t *testing.T) {
 		}},
 	})
 
-	packet := make([]byte, protocol.MinUnknownVersionPacketSize)
-	packet[0] = 0xc0
-	binary.BigEndian.PutUint32(packet[1:5], uint32(draftVersion))
-	packet[5] = 8
-	copy(packet[6:14], []byte{1, 2, 3, 4, 5, 6, 7, 8})
-	packet[14] = 8
-	copy(packet[15:23], []byte{8, 7, 6, 5, 4, 3, 2, 1})
 	clientConn := newUDPConnLocalhost(t)
 	defer clientConn.Close()
 	remote := clientConn.LocalAddr()
-	server.handlePacket(newJLSReceivedPacket(packet, remote))
+	for _, version := range []protocol.Version{reservedVersion, draftVersion} {
+		packet := make([]byte, protocol.MinUnknownVersionPacketSize)
+		packet[0] = 0xc0
+		binary.BigEndian.PutUint32(packet[1:5], uint32(version))
+		packet[5] = 8
+		copy(packet[6:14], []byte{1, 2, 3, 4, 5, 6, 7, 8})
+		packet[14] = 8
+		copy(packet[15:23], []byte{8, 7, 6, 5, 4, 3, 2, 1})
+		server.handlePacket(newJLSReceivedPacket(packet, remote))
 
-	require.NoError(t, upstream.SetReadDeadline(time.Now().Add(time.Second)))
-	got := make([]byte, len(packet)+1)
-	n, _, err := upstream.ReadFrom(got)
-	require.NoError(t, err)
-	require.Equal(t, packet, got[:n])
+		require.NoError(t, upstream.SetReadDeadline(time.Now().Add(time.Second)))
+		got := make([]byte, len(packet)+1)
+		n, _, err := upstream.ReadFrom(got)
+		require.NoError(t, err, "version %#x", version)
+		require.Equal(t, packet, got[:n], "version %#x", version)
+	}
 }
 
 // JLS END

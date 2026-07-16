@@ -477,12 +477,10 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 			}
 			return false
 		}
-		if s.jlsForwarder != nil &&
-			protocol.IsSupportedVersion(versionNegotiationVersions, v) &&
-			!isReservedQUICVersion(v) &&
-			s.jlsForwarder.handleCamouflageVersionPacket(p) {
+		if s.jlsForwarder != nil && protocol.IsSupportedVersion(versionNegotiationVersions, v) {
 			// The camouflage profile advertised this version, but this QUIC stack
 			// can't decode it. Let the real upstream produce the observable result.
+			s.jlsForwarder.handleCamouflageVersionPacket(p)
 			return false
 		}
 		return s.enqueueVersionNegotiationPacket(p)
@@ -712,14 +710,6 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 				Trigger: qlog.PacketDropUnexpectedPacket,
 			})
 		}
-		// JLS BEGIN: quinn-jls answers invalid Initial DCIDs with an Initial close.
-		if s.config.JLSConfig != nil {
-			sealer, _ := handshake.NewInitialAEAD(hdr.DestConnectionID, protocol.PerspectiveServer, hdr.Version)
-			if err := s.sendError(p.remoteAddr, hdr, sealer, ProtocolViolation, p.info); err != nil {
-				s.logger.Debugf("Error sending PROTOCOL_VIOLATION error: %s", err)
-			}
-		}
-		// JLS END
 		p.buffer.Release()
 		return errors.New("too short connection ID")
 	}
@@ -1147,7 +1137,6 @@ func (s *baseServer) maybeSendVersionNegotiationPacket(p receivedPacket) {
 	_, versions := s.config.quicVersionProfile()
 	var data []byte
 	if s.jlsForwarder != nil {
-		versions = jlsVersionNegotiationProfile(v, versions)
 		data = wire.ComposeVersionNegotiationExact(dest, src, versions)
 	} else {
 		data = wire.ComposeVersionNegotiation(dest, src, versions)
@@ -1166,39 +1155,3 @@ func (s *baseServer) maybeSendVersionNegotiationPacket(p receivedPacket) {
 		s.logger.Debugf("Error sending Version Negotiation: %s", err)
 	}
 }
-
-// JLS BEGIN: reproduce the camouflage target's exact GREASE behavior.
-const (
-	jlsDefaultGreaseVersion protocol.Version = 0x0a1a2a3a
-	jlsGreaseVersionStep    protocol.Version = 0x10
-	jlsReservedVersionMask  protocol.Version = 0x0f0f0f0f
-	jlsReservedVersionValue protocol.Version = 0x0a0a0a0a
-)
-
-func isReservedQUICVersion(version protocol.Version) bool {
-	return version&jlsReservedVersionMask == jlsReservedVersionValue
-}
-
-func jlsVersionNegotiationProfile(offered protocol.Version, configured []protocol.Version) []protocol.Version {
-	versions := append([]protocol.Version(nil), configured...)
-	hasGrease := false
-	for i, version := range versions {
-		if !isReservedQUICVersion(version) {
-			continue
-		}
-		hasGrease = true
-		if version == offered {
-			versions[i] = version + jlsGreaseVersionStep
-		}
-	}
-	if !hasGrease {
-		grease := jlsDefaultGreaseVersion
-		if grease == offered {
-			grease += jlsGreaseVersionStep
-		}
-		versions = append([]protocol.Version{grease}, versions...)
-	}
-	return versions
-}
-
-// JLS END

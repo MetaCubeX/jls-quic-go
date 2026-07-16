@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/big"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -153,8 +152,6 @@ type Transport struct {
 	server *baseServer
 	// JLS BEGIN: fast-path pointer for internal camouflage forwarding.
 	jlsForwarder atomic.Pointer[jlsForwarder]
-	jlsResetMu   sync.Mutex
-	jlsLastReset time.Time
 	// JLS END
 
 	conn rawConn
@@ -213,28 +210,9 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		return nil, errListenerAlreadySet
 	}
 	conf = populateConfig(conf)
-	// JLS BEGIN: match quinn-jls's externally visible 8-byte server CIDs by default.
-	jlsEnabled := conf.JLSConfig != nil
-	if jlsEnabled && t.ConnectionIDGenerator == nil && t.ConnectionIDLength == 0 && t.conn == nil {
-		t.ConnectionIDLength = jlsDefaultConnectionIDLen
-	}
-	if jlsEnabled && t.StatelessResetKey == nil && t.conn == nil {
-		key := &StatelessResetKey{}
-		if _, err := rand.Read(key[:]); err != nil {
-			return nil, err
-		}
-		t.StatelessResetKey = key
-	}
-	// JLS END
 	if err := t.init(false); err != nil {
 		return nil, err
 	}
-	// JLS BEGIN: use verifiable default CIDs so upstream migration can be distinguished
-	// from an unknown CID that should receive a Stateless Reset.
-	if jlsEnabled && t.ConnectionIDGenerator == nil && t.connIDLen >= 2 {
-		t.connIDGenerator = newJLSConnectionIDGenerator(t.connIDLen)
-	}
-	// JLS END
 	maxTokenAge := t.MaxTokenAge
 	if maxTokenAge == 0 {
 		maxTokenAge = 24 * time.Hour
@@ -638,13 +616,6 @@ func (t *Transport) handlePacket(p receivedPacket) {
 		return
 	}
 	if !wire.IsLongHeaderPacket(p.data[0]) {
-		// JLS BEGIN: align with quinn-jls active migration forwarding.
-		if validator, ok := t.connIDGenerator.(jlsConnectionIDValidator); ok && !validator.ValidateConnectionID(connID) {
-			if jlsForwarder != nil && jlsForwarder.handleMigratedClientPacket(p) {
-				return
-			}
-		}
-		// JLS END
 		if statelessResetQueued := t.maybeSendStatelessReset(p); !statelessResetQueued {
 			if t.Tracer != nil {
 				t.Tracer.RecordEvent(qlog.PacketDropped{
@@ -688,37 +659,9 @@ func (t *Transport) maybeSendStatelessReset(p receivedPacket) (statelessResetQue
 
 	// Don't send a stateless reset in response to very small packets.
 	// This includes packets that could be stateless resets.
-	// JLS BEGIN: match the camouflage target's reset trigger size.
-	isJLS := false
-	if _, ok := t.connIDGenerator.(jlsConnectionIDValidator); ok {
-		isJLS = true
-	}
-	minSize := protocol.MinStatelessResetSize
-	if isJLS {
-		minSize = jlsMinStatelessResetSize
-	}
-	if len(p.data) <= minSize {
+	if len(p.data) <= protocol.MinStatelessResetSize {
 		return false
 	}
-	// JLS END
-
-	// JLS BEGIN: match the camouflage target's global reset rate limit.
-	if isJLS {
-		t.jlsResetMu.Lock()
-		defer t.jlsResetMu.Unlock()
-		now := time.Now()
-		if !t.jlsLastReset.IsZero() && now.Sub(t.jlsLastReset) < jlsMinStatelessResetInterval {
-			return false
-		}
-		select {
-		case t.statelessResetQueue <- p:
-			t.jlsLastReset = now
-			return true
-		default:
-			return false
-		}
-	}
-	// JLS END
 
 	select {
 	case t.statelessResetQueue <- p:
@@ -739,26 +682,7 @@ func (t *Transport) sendStatelessReset(p receivedPacket) {
 	}
 	token := t.statelessResetter.GetStatelessResetToken(connID)
 	t.logger.Debugf("Sending stateless reset to %s (connection ID: %s). Token: %#x", p.remoteAddr, connID, token)
-	// JLS BEGIN: match the camouflage target's reset length distribution.
-	paddingLen := protocol.MinStatelessResetSize - 16
-	if _, ok := t.connIDGenerator.(jlsConnectionIDValidator); ok {
-		const idealMinPaddingLen = jlsStatelessResetMinPadding + jlsMaxConnectionIDLen
-		maxPaddingLen := len(p.data) - jlsStatelessResetTokenLen - 1
-		if maxPaddingLen < jlsStatelessResetMinPadding {
-			return
-		}
-		if maxPaddingLen <= idealMinPaddingLen {
-			paddingLen = maxPaddingLen
-		} else {
-			randomRange, err := rand.Int(rand.Reader, big.NewInt(int64(maxPaddingLen-idealMinPaddingLen)))
-			if err != nil {
-				return
-			}
-			paddingLen = idealMinPaddingLen + int(randomRange.Int64())
-		}
-	}
-	data := make([]byte, paddingLen, paddingLen+16)
-	// JLS END
+	data := make([]byte, protocol.MinStatelessResetSize-16, protocol.MinStatelessResetSize)
 	rand.Read(data)
 	data[0] = (data[0] & 0x7f) | 0x40
 	data = append(data, token[:]...)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/metacubex/jls-quic-go/internal/protocol"
 	"github.com/metacubex/jls-quic-go/internal/utils"
+	tls "github.com/metacubex/jls-tls"
 )
 
 // JLS BEGIN: JLS camouflage forwarding support.
@@ -119,7 +120,7 @@ func (c *Conn) handleJLSPacket(p receivedPacket, capture bool) bool {
 
 func (c *Conn) finishJLSAuthentication() {
 	pending := c.jlsForwardCapture
-	if pending == nil || !c.cryptoStreamHandler.ConnectionState().JLS.Authenticated {
+	if pending == nil || c.cryptoStreamHandler.ConnectionState().JLS.Status != tls.JLSAuthenticated {
 		return
 	}
 	pending.mu.Lock()

@@ -2036,7 +2036,10 @@ func (c *Conn) handleConnectionCloseFrame(frame *wire.ConnectionCloseFrame) erro
 	}
 }
 
-func (c *Conn) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel, rcvTime monotime.Time) error {
+func (c *Conn) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.EncryptionLevel, rcvTime monotime.Time) (err error) {
+	// JLS BEGIN: commit authentication or mark pre-flight failures for fallback.
+	defer func() { err = c.handleJLSHandshakeResult(err) }()
+	// JLS END
 	if err := c.cryptoStreamManager.HandleCryptoFrame(frame, encLevel); err != nil {
 		return err
 	}
@@ -2045,11 +2048,10 @@ func (c *Conn) handleCryptoFrame(frame *wire.CryptoFrame, encLevel protocol.Encr
 		if data == nil {
 			break
 		}
-		if err := c.cryptoStreamHandler.HandleMessage(data, encLevel); err != nil {
+		// JLS BEGIN: validate JLS state before publishing TLS handshake events.
+		if err := c.handleJLSCryptoData(data, encLevel); err != nil {
 			return err
 		}
-		// JLS BEGIN: discard captured datagrams when TLS authenticates JLS.
-		c.finishJLSAuthentication()
 		// JLS END
 	}
 	return c.handleHandshakeEvents(rcvTime)
@@ -2198,13 +2200,14 @@ func (c *Conn) handleDatagramFrame(f *wire.DatagramFrame) error {
 }
 
 func (c *Conn) setCloseError(e *closeError) {
-	// JLS BEGIN: authentication failures switch to camouflage forwarding without a QUIC close.
-	jlsAuthFailed := errors.Is(e.err, tls.ErrJLSAuthFailed)
-	if jlsAuthFailed {
+	// JLS BEGIN: pre-flight handshake failures switch to camouflage forwarding without a QUIC close.
+	var fallbackErr *jlsFallbackError
+	jlsFallback := errors.Is(e.err, tls.ErrJLSAuthFailed) || errors.As(e.err, &fallbackErr)
+	if jlsFallback {
 		e.immediate = true
 	}
-	if c.closeErr.CompareAndSwap(nil, e) && jlsAuthFailed {
-		c.forwardJLSAuthenticationFailure()
+	if c.closeErr.CompareAndSwap(nil, e) && jlsFallback {
+		c.forwardJLSFallback()
 	}
 	// JLS END
 	select {

@@ -2,6 +2,7 @@ package quic
 
 import (
 	"context"
+	"errors"
 	"net"
 	"sync"
 	"time"
@@ -20,6 +21,8 @@ const (
 	jlsMaxCapturedPackets    = 32
 	jlsMaxCapturedBytes      = 64 << 10
 )
+
+var errJLSConfigDisabled = errors.New("quic: JLS forwarding requires TLS JLS")
 
 type jlsForwarder struct {
 	conn   rawConn
@@ -63,8 +66,20 @@ type jlsForwardCapture struct {
 	overflow   bool
 }
 
+func (c *JLSConfig) forwardingEnabled() bool {
+	return c != nil && c.UpstreamAddr != "" && c.PacketDialer != nil
+}
+
+type jlsFallbackError struct {
+	err error
+}
+
+func (e *jlsFallbackError) Error() string { return e.err.Error() }
+
+func (e *jlsFallbackError) Unwrap() error { return e.err }
+
 func newJLSForwarder(conn rawConn, cfg *JLSConfig) *jlsForwarder {
-	if cfg == nil || cfg.UpstreamAddr == "" || cfg.PacketDialer == nil {
+	if !cfg.forwardingEnabled() {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -118,21 +133,37 @@ func (c *Conn) handleJLSPacket(p receivedPacket, capture bool) bool {
 	return false
 }
 
-func (c *Conn) finishJLSAuthentication() {
-	pending := c.jlsForwardCapture
-	if pending == nil || c.cryptoStreamHandler.ConnectionState().JLS.Status != tls.JLSAuthenticated {
-		return
+func (c *Conn) handleJLSCryptoData(data []byte, encLevel protocol.EncryptionLevel) error {
+	err := c.cryptoStreamHandler.HandleMessage(data, encLevel)
+	if err == nil && c.jlsForwardCapture != nil && c.cryptoStreamHandler.ConnectionState().JLS.Status == tls.JLSDisabled {
+		return errJLSConfigDisabled
 	}
+	return err
+}
+
+func (c *Conn) handleJLSHandshakeResult(err error) error {
+	pending := c.jlsForwardCapture
+	if pending == nil {
+		return err
+	}
+	authenticated := err == nil && c.cryptoStreamHandler.ConnectionState().JLS.Status == tls.JLSAuthenticated
 	pending.mu.Lock()
-	if pending.state == jlsForwardCaptureActive {
+	defer pending.mu.Unlock()
+	if err != nil {
+		if pending.state == jlsForwardCaptureActive {
+			return &jlsFallbackError{err: err}
+		}
+		return err
+	}
+	if authenticated && pending.state == jlsForwardCaptureActive {
 		pending.state = jlsForwardCaptureDisabled
 		pending.packets = nil
 		pending.bytes = 0
 	}
-	pending.mu.Unlock()
+	return nil
 }
 
-func (c *Conn) forwardJLSAuthenticationFailure() {
+func (c *Conn) forwardJLSFallback() {
 	pending := c.jlsForwardCapture
 	if pending != nil {
 		pending.forwarder.activateForwardCapture(pending)

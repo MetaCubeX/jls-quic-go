@@ -5,17 +5,19 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
-	"github.com/metacubex/jls-tls"
-	"golang.org/x/exp/slices"
 	"net"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/metacubex/jls-tls"
+	"golang.org/x/exp/slices"
+
 	"github.com/metacubex/jls-quic-go/internal/handshake"
 	"github.com/metacubex/jls-quic-go/internal/monotime"
 	"github.com/metacubex/jls-quic-go/internal/protocol"
 	"github.com/metacubex/jls-quic-go/internal/qerr"
+	"github.com/metacubex/jls-quic-go/internal/testdata"
 	"github.com/metacubex/jls-quic-go/internal/utils"
 	"github.com/metacubex/jls-quic-go/internal/wire"
 	"github.com/metacubex/jls-quic-go/qlog"
@@ -790,6 +792,19 @@ func TestServerTokenValidation(t *testing.T) {
 }
 
 // JLS BEGIN: forwarding behavior after endpoint and TLS validation.
+func getJLSClientHello(t testing.TB, config *tls.Config) []byte {
+	t.Helper()
+	c := tls.QUICClient(&tls.QUICConfig{TLSConfig: config})
+	c.SetTransportParameters((&wire.TransportParameters{
+		InitialSourceConnectionID: protocol.ParseConnectionID([]byte{9, 8, 7, 6}),
+	}).Marshal(protocol.PerspectiveClient))
+	require.NoError(t, c.Start(context.Background()))
+	ev := c.NextEvent()
+	require.Equal(t, tls.QUICWriteData, ev.Kind)
+	checkClientHello(t, ev.Data)
+	return ev.Data
+}
+
 func TestJLSServerValidatesTokenBeforeForwarding(t *testing.T) {
 	makeServer := func(t *testing.T, dialCount *atomic.Int32, useRetry bool) (*testServer, *events.Recorder) {
 		t.Helper()
@@ -857,46 +872,118 @@ func TestJLSServerValidatesTokenBeforeForwarding(t *testing.T) {
 	})
 }
 
-func TestJLSServerForwardsOriginalDatagramsAfterTLSAuthFailure(t *testing.T) {
-	upstream, err := net.ListenPacket("udp", "127.0.0.1:0")
-	require.NoError(t, err)
-	defer upstream.Close()
+func TestJLSServerForwardsOriginalDatagramsAfterTLSFailure(t *testing.T) {
+	user := tls.JLSUser{Username: "user", Password: "password"}
+	for _, test := range []struct {
+		name          string
+		clientHello   func(testing.TB) []byte
+		serverALPN    []string
+		authenticated bool
+		disableJLS    bool
+	}{
+		{
+			name:        "authentication failure",
+			clientHello: func(t testing.TB) []byte { return getClientHello(t, "example.com") },
+		},
+		{
+			name: "ALPN mismatch after authentication",
+			clientHello: func(t testing.TB) []byte {
+				return getJLSClientHello(t, &tls.Config{
+					ServerName:         "example.com",
+					MinVersion:         tls.VersionTLS13,
+					InsecureSkipVerify: true,
+					CurvePreferences:   []tls.CurveID{tls.CurveP256},
+					NextProtos:         []string{"h3"},
+					JLSConfig:          &tls.JLSConfig{Enable: true, User: user},
+				})
+			},
+			serverALPN:    []string{"http/1.1"},
+			authenticated: true,
+		},
+		{
+			name: "JLS disabled by TLS callback",
+			clientHello: func(t testing.TB) []byte {
+				return getJLSClientHello(t, &tls.Config{
+					ServerName:         "example.com",
+					MinVersion:         tls.VersionTLS13,
+					InsecureSkipVerify: true,
+					CurvePreferences:   []tls.CurveID{tls.CurveP256},
+					JLSConfig:          &tls.JLSConfig{Enable: true, User: user},
+				})
+			},
+			disableJLS: true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			upstream, err := net.ListenPacket("udp", "127.0.0.1:0")
+			require.NoError(t, err)
+			defer upstream.Close()
+			serverTLSConfig := &tls.Config{
+				NextProtos: test.serverALPN,
+				JLSConfig: &tls.JLSConfig{
+					Enable: true,
+					Users:  []tls.JLSUser{user},
+				},
+			}
+			var callbackCalled atomic.Bool
+			if test.disableJLS {
+				serverTLSConfig.Certificates = testdata.GetTLSConfig().Certificates
+				serverTLSConfig.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
+					callbackCalled.Store(true)
+					config := serverTLSConfig.Clone()
+					config.GetConfigForClient = nil
+					config.JLSConfig = nil
+					return config, nil
+				}
+			}
 
-	server := newTestServer(t, &serverOpts{
-		newConn: newConnection,
-		config: &Config{JLSConfig: &JLSConfig{
-			UpstreamAddr: upstream.LocalAddr().String(),
-			PacketDialer: testJLSDialer(t, upstream),
-		}},
-		tlsConfig: &tls.Config{JLSConfig: &tls.JLSConfig{
-			Enable: true,
-			Users:  []tls.JLSUser{{Username: "user", Password: "password"}},
-		}},
-	})
+			server := newTestServer(t, &serverOpts{
+				newConn: newConnection,
+				config: &Config{JLSConfig: &JLSConfig{
+					UpstreamAddr: upstream.LocalAddr().String(),
+					PacketDialer: testJLSDialer(t, upstream),
+				}},
+				tlsConfig: serverTLSConfig,
+			})
 
-	clientConn := newUDPConnLocalhost(t)
-	defer clientConn.Close()
-	clientHello := getClientHello(t, "example.com")
-	dcid := []byte{1, 2, 3, 4, 5, 6, 7, 8}
-	split := len(clientHello) / 2
-	first := composeJLSInitialPacketWithOffsetAndNumber(t, protocol.Version1, dcid, clientHello[:split], 0, 1)
-	second := composeJLSInitialPacketWithOffsetAndNumber(t, protocol.Version1, dcid, clientHello[split:], protocol.ByteCount(split), 2)
-	if len(first) < protocol.MinInitialPacketSize {
-		first = append(first, make([]byte, protocol.MinInitialPacketSize-len(first))...)
-	}
-	if len(second) < protocol.MinInitialPacketSize {
-		second = append(second, make([]byte, protocol.MinInitialPacketSize-len(second))...)
-	}
+			clientConn := newUDPConnLocalhost(t)
+			defer clientConn.Close()
+			clientHello := test.clientHello(t)
+			if test.authenticated {
+				tlsServer := tls.QUICServer(&tls.QUICConfig{TLSConfig: serverTLSConfig.Clone()})
+				require.NoError(t, tlsServer.Start(context.Background()))
+				tlsErr := tlsServer.HandleData(tls.QUICEncryptionLevelInitial, clientHello)
+				require.Error(t, tlsErr)
+				require.ErrorContains(t, tlsErr, "application protocol")
+				require.NotErrorIs(t, tlsErr, tls.ErrJLSAuthFailed)
+				require.Equal(t, tls.JLSAuthenticated, tlsServer.ConnectionState().JLS.Status)
+				_ = tlsServer.Close()
+			}
+			dcid := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+			split := len(clientHello) / 2
+			first := composeJLSInitialPacketWithOffsetAndNumber(t, protocol.Version1, dcid, clientHello[:split], 0, 1)
+			second := composeJLSInitialPacketWithOffsetAndNumber(t, protocol.Version1, dcid, clientHello[split:], protocol.ByteCount(split), 2)
+			if len(first) < protocol.MinInitialPacketSize {
+				first = append(first, make([]byte, protocol.MinInitialPacketSize-len(first))...)
+			}
+			if len(second) < protocol.MinInitialPacketSize {
+				second = append(second, make([]byte, protocol.MinInitialPacketSize-len(second))...)
+			}
 
-	server.handlePacket(newJLSReceivedPacket(first, clientConn.LocalAddr()))
-	server.handlePacket(newJLSReceivedPacket(second, clientConn.LocalAddr()))
+			server.handlePacket(newJLSReceivedPacket(first, clientConn.LocalAddr()))
+			server.handlePacket(newJLSReceivedPacket(second, clientConn.LocalAddr()))
 
-	require.NoError(t, upstream.SetReadDeadline(time.Now().Add(time.Second)))
-	buf := make([]byte, protocol.MaxPacketBufferSize)
-	for i, expected := range [][]byte{first, second} {
-		n, _, readErr := upstream.ReadFrom(buf)
-		require.NoError(t, readErr, "reading forwarded datagram %d", i)
-		require.Equal(t, expected, buf[:n])
+			require.NoError(t, upstream.SetReadDeadline(time.Now().Add(time.Second)))
+			buf := make([]byte, protocol.MaxPacketBufferSize)
+			for i, expected := range [][]byte{first, second} {
+				n, _, readErr := upstream.ReadFrom(buf)
+				require.NoError(t, readErr, "reading forwarded datagram %d", i)
+				require.Equal(t, expected, buf[:n])
+			}
+			if test.disableJLS {
+				require.True(t, callbackCalled.Load())
+			}
+		})
 	}
 }
 

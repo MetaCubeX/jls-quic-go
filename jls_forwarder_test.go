@@ -42,15 +42,19 @@ func TestJLSForwardConnIdleFor(t *testing.T) {
 func TestJLSTransportUsesQUICDefaults(t *testing.T) {
 	pc := newUDPConnLocalhost(t)
 	tr := &Transport{Conn: pc}
-	listener, err := tr.Listen(&tls.Config{JLSConfig: &tls.JLSConfig{
-		Enable: true,
-		Users:  []tls.JLSUser{{Username: "user", Password: "password"}},
-	}}, &Config{JLSConfig: &JLSConfig{
+	config := &Config{JLSConfig: &JLSConfig{
 		UpstreamAddr: "127.0.0.1:443",
 		PacketDialer: func(context.Context, string, string) (net.PacketConn, net.Addr, error) {
 			return nil, nil, nil
 		},
-	}})
+	}}
+	if _, err := tr.Listen(&tls.Config{}, config); err != errJLSConfigDisabled {
+		t.Fatalf("error = %v, want %v", err, errJLSConfigDisabled)
+	}
+	listener, err := tr.Listen(&tls.Config{JLSConfig: &tls.JLSConfig{
+		Enable: true,
+		Users:  []tls.JLSUser{{Username: "user", Password: "password"}},
+	}}, config)
 	if err != nil {
 		t.Fatal(err)
 	}

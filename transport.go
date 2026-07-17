@@ -210,6 +210,11 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		return nil, errListenerAlreadySet
 	}
 	conf = populateConfig(conf)
+	// JLS BEGIN: require TLS authentication whenever camouflage forwarding is active.
+	if conf.JLSConfig.forwardingEnabled() && (tlsConf.JLSConfig == nil || !tlsConf.JLSConfig.Enable) {
+		return nil, errJLSConfigDisabled
+	}
+	// JLS END
 	if err := t.init(false); err != nil {
 		return nil, err
 	}

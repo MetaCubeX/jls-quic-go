@@ -176,8 +176,9 @@ type Conn struct {
 	handshakeStream     *cryptoStream
 	oneRTTStream        *cryptoStream // only set for the server
 	cryptoStreamHandler cryptoStreamHandler
-	// JLS BEGIN: retain pre-authentication datagrams for camouflage forwarding.
-	jlsForwardCapture *jlsForwardCapture
+	// JLS BEGIN: retain pre-authentication datagrams and enforce client authentication.
+	jlsForwardCapture        *jlsForwardCapture
+	requireJLSAuthentication bool
 	// JLS END
 
 	notifyReceivedPacket chan struct{}
@@ -418,6 +419,9 @@ var newClientConnection = func(
 		qlogTrace:           qlogTrace,
 		versionNegotiated:   hasNegotiatedVersion,
 		version:             v,
+		// JLS BEGIN: a QUIC client configured for JLS must not accept camouflage TLS.
+		requireJLSAuthentication: tlsConf.JLSConfig != nil && tlsConf.JLSConfig.Enable,
+		// JLS END
 	}
 	if qlogTrace != nil {
 		s.qlogger = qlogTrace.AddProducer()
@@ -2065,6 +2069,11 @@ func (c *Conn) handleHandshakeEvents(now monotime.Time) error {
 		case handshake.EventNoEvent:
 			return nil
 		case handshake.EventHandshakeComplete:
+			// JLS BEGIN: reject camouflage TLS before publishing handshake completion.
+			if c.requireJLSAuthentication && c.cryptoStreamHandler.ConnectionState().JLS.Status != tls.JLSAuthenticated {
+				return tls.ErrJLSAuthFailed
+			}
+			// JLS END
 			// Don't call handleHandshakeComplete yet.
 			// It's advantageous to process ACK frames that might be serialized after the CRYPTO frame first.
 			c.handshakeComplete = true

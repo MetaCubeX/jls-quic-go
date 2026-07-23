@@ -53,6 +53,7 @@ type TokenStore interface {
 // JLS BEGIN: caller-controlled camouflage packet dialing.
 // JLSPacketDialer creates a fresh packet connection for JLS camouflage
 // forwarding and returns the resolved upstream address used with WriteTo.
+// It must return promptly when ctx is canceled.
 type JLSPacketDialer func(ctx context.Context, network, address string) (net.PacketConn, net.Addr, error)
 
 // JLSConfig configures ShadowQUIC JLS camouflage behavior in the QUIC layer.
@@ -60,13 +61,6 @@ type JLSConfig struct {
 	UpstreamAddr string
 	RateLimit    uint64
 	PacketDialer JLSPacketDialer
-
-	// VersionNegotiationVersions controls the versions advertised in server
-	// Version Negotiation packets. If unset, Config.Versions is used.
-	VersionNegotiationVersions []Version
-	// GetVersionNegotiationProfile is called before handling a packet that may
-	// depend on the advertised profile. Empty values retain the configured ones.
-	GetVersionNegotiationProfile func() (versions []Version, versionNegotiationVersions []Version)
 }
 
 // JLS END

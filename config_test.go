@@ -94,9 +94,8 @@ func configWithNonZeroNonFunctionFields(t *testing.T) *Config {
 		// JLS BEGIN: account for the nested JLS configuration.
 		case "JLSConfig":
 			f.Set(reflect.ValueOf(&JLSConfig{
-				UpstreamAddr:               "127.0.0.1:443",
-				RateLimit:                  1024,
-				VersionNegotiationVersions: []Version{1, 2, 3, 4},
+				UpstreamAddr: "127.0.0.1:443",
+				RateLimit:    1024,
 			}))
 		// JLS END
 		case "ConnectionIDLength":
@@ -152,7 +151,7 @@ func TestConfigClone(t *testing.T) {
 	t.Run("function fields", func(t *testing.T) {
 		var calledAllowConnectionWindowIncrease, calledTracer bool
 		// JLS BEGIN: verify JLS callbacks survive Config.Clone.
-		var calledJLSPacketDialer, calledGetVersionNegotiationProfile bool
+		var calledJLSPacketDialer bool
 		// JLS END
 		c1 := &Config{
 			GetConfigForClient:            func(info *ClientInfo) (*Config, error) { return nil, assert.AnError },
@@ -162,10 +161,6 @@ func TestConfigClone(t *testing.T) {
 				PacketDialer: func(context.Context, string, string) (net.PacketConn, net.Addr, error) {
 					calledJLSPacketDialer = true
 					return nil, nil, assert.AnError
-				},
-				GetVersionNegotiationProfile: func() ([]Version, []Version) {
-					calledGetVersionNegotiationProfile = true
-					return []Version{protocol.Version1}, []Version{protocol.Version1}
 				},
 			},
 			// JLS END
@@ -183,10 +178,6 @@ func TestConfigClone(t *testing.T) {
 		_, _, err = c2.JLSConfig.PacketDialer(context.Background(), "udp", "127.0.0.1:443")
 		require.ErrorIs(t, err, assert.AnError)
 		require.True(t, calledJLSPacketDialer)
-		versions, vnVersions := c2.JLSConfig.GetVersionNegotiationProfile()
-		require.Equal(t, []Version{protocol.Version1}, versions)
-		require.Equal(t, []Version{protocol.Version1}, vnVersions)
-		require.True(t, calledGetVersionNegotiationProfile)
 		// JLS END
 		c2.Tracer(context.Background(), true, protocol.ConnectionID{})
 		require.True(t, calledTracer)

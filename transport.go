@@ -210,9 +210,14 @@ func (t *Transport) createServer(tlsConf *tls.Config, conf *Config, allow0RTT bo
 		return nil, errListenerAlreadySet
 	}
 	conf = populateConfig(conf)
-	// JLS BEGIN: require TLS authentication whenever camouflage forwarding is active.
-	if conf.JLSConfig.forwardingEnabled() && (tlsConf.JLSConfig == nil || !tlsConf.JLSConfig.Enable) {
-		return nil, errJLSConfigDisabled
+	// JLS BEGIN: require TLS authentication and reject pre-authentication Retry output.
+	if conf.JLSConfig.forwardingEnabled() {
+		if tlsConf.JLSConfig == nil || !tlsConf.JLSConfig.Enable {
+			return nil, errJLSConfigDisabled
+		}
+		if t.VerifySourceAddress != nil {
+			return nil, errJLSVerifySourceAddr
+		}
 	}
 	// JLS END
 	if err := t.init(false); err != nil {
@@ -589,6 +594,14 @@ func (t *Transport) handlePacket(p receivedPacket) {
 	}
 	// JLS END
 	if !wire.IsPotentialQUICPacket(p.data[0]) && !wire.IsLongHeaderPacket(p.data[0]) {
+		// JLS BEGIN: a greased short-header QUIC packet is indistinguishable
+		// from other UDP here, so let the configured QUIC upstream decide.
+		if jlsForwarder != nil {
+			jlsForwarder.handleCamouflagePathPacket(p)
+			p.buffer.Release()
+			return
+		}
+		// JLS END
 		t.handleNonQUICPacket(p)
 		return
 	}
@@ -621,6 +634,15 @@ func (t *Transport) handlePacket(p receivedPacket) {
 		return
 	}
 	if !wire.IsLongHeaderPacket(p.data[0]) {
+		// JLS BEGIN: let the camouflage upstream validate unmatched QUIC paths.
+		// If forwarding is currently limited, silence is safer than a local
+		// Stateless Reset with a fingerprint unrelated to the camouflage target.
+		if jlsForwarder != nil {
+			jlsForwarder.handleCamouflagePathPacket(p)
+			p.buffer.Release()
+			return
+		}
+		// JLS END
 		if statelessResetQueued := t.maybeSendStatelessReset(p); !statelessResetQueued {
 			if t.Tracer != nil {
 				t.Tracer.RecordEvent(qlog.PacketDropped{

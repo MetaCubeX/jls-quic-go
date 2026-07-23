@@ -41,14 +41,14 @@ func TestConnectionStatsReportsCurrentMTU(t *testing.T) {
 	require.Equal(t, uint16(1400), conn.ConnectionStats().CurrentMTU)
 }
 
-func TestJLSClientRequiresAuthenticationAtHandshakeCompletion(t *testing.T) {
+func TestJLSClientDefersAuthenticationFailureUntilFinishedIsSent(t *testing.T) {
 	for _, test := range []struct {
-		name    string
-		status  tls.JLSStatus
-		wantErr bool
+		name        string
+		status      tls.JLSStatus
+		wantPending bool
 	}{
 		{name: "Authenticated", status: tls.JLSAuthenticated},
-		{name: "Unauthenticated", status: tls.JLSUnauthenticated, wantErr: true},
+		{name: "Unauthenticated", status: tls.JLSUnauthenticated, wantPending: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			mockCtrl := gomock.NewController(t)
@@ -60,18 +60,12 @@ func TestJLSClientRequiresAuthenticationAtHandshakeCompletion(t *testing.T) {
 			cs.EXPECT().ConnectionState().Return(handshake.ConnectionState{
 				ConnectionState: tls.ConnectionState{JLS: tls.JLSState{Status: test.status}},
 			})
-			if !test.wantErr {
-				cs.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent})
-			}
+			cs.EXPECT().NextEvent().Return(handshake.Event{Kind: handshake.EventNoEvent})
 
 			err := tc.conn.handleHandshakeEvents(monotime.Now())
-			if test.wantErr {
-				require.ErrorIs(t, err, tls.ErrJLSAuthFailed)
-				require.False(t, tc.conn.handshakeComplete)
-			} else {
-				require.NoError(t, err)
-				require.True(t, tc.conn.handshakeComplete)
-			}
+			require.NoError(t, err)
+			require.Equal(t, test.wantPending, tc.conn.jlsAuthFailurePending)
+			require.Equal(t, !test.wantPending, tc.conn.handshakeComplete)
 		})
 	}
 }

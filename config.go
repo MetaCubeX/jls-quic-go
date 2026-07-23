@@ -22,42 +22,6 @@ func (c *Config) maxRetryTokenAge() time.Duration {
 	return c.handshakeTimeout()
 }
 
-// JLS BEGIN: allow the camouflage target's QUIC version profile to be applied lazily.
-func (c *Config) quicVersionProfile() ([]protocol.Version, []protocol.Version) {
-	versions := c.Versions
-	versionNegotiationVersions := versions
-	if c.JLSConfig == nil {
-		return versions, versionNegotiationVersions
-	}
-	if len(c.JLSConfig.VersionNegotiationVersions) > 0 {
-		versionNegotiationVersions = c.JLSConfig.VersionNegotiationVersions
-	}
-	if c.JLSConfig.GetVersionNegotiationProfile != nil {
-		dynamicVersions, dynamicVersionNegotiationVersions := c.JLSConfig.GetVersionNegotiationProfile()
-		if len(dynamicVersions) > 0 && validQUICVersions(dynamicVersions) {
-			versions = dynamicVersions
-		}
-		if len(dynamicVersionNegotiationVersions) > 0 {
-			versionNegotiationVersions = dynamicVersionNegotiationVersions
-		}
-	}
-	if len(versionNegotiationVersions) == 0 {
-		versionNegotiationVersions = versions
-	}
-	return versions, versionNegotiationVersions
-}
-
-func validQUICVersions(versions []protocol.Version) bool {
-	for _, v := range versions {
-		if !protocol.IsValidVersion(v) {
-			return false
-		}
-	}
-	return true
-}
-
-// JLS END
-
 func validateConfig(config *Config) error {
 	if config == nil {
 		return nil

@@ -28,6 +28,35 @@ type tokenStore struct {
 	puts  chan<- string
 }
 
+// JLS BEGIN: an invalid JLS server still receives a complete camouflage handshake.
+func TestJLSClientCompletesCamouflageHandshake(t *testing.T) {
+	server, err := quic.Listen(newUDPConnLocalhost(t), getTLSConfig(), getQuicConfig(nil))
+	require.NoError(t, err)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	serverResult := make(chan error, 1)
+	go func() {
+		conn, err := server.Accept(ctx)
+		if err == nil {
+			_ = conn.CloseWithError(0, "")
+		}
+		serverResult <- err
+	}()
+
+	clientTLS := getTLSClientConfig()
+	clientTLS.JLSConfig = &tls.JLSConfig{
+		Enable: true,
+		User:   tls.JLSUser{Username: "user", Password: "password"},
+	}
+	_, err = quic.Dial(ctx, newUDPConnLocalhost(t), server.Addr(), clientTLS, getQuicConfig(nil))
+	require.ErrorIs(t, err, tls.ErrJLSAuthFailed)
+	require.NoError(t, <-serverResult)
+}
+
+// JLS END
+
 var _ quic.TokenStore = &tokenStore{}
 
 func newTokenStore(gets, puts chan<- string) quic.TokenStore {

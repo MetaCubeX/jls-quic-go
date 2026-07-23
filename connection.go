@@ -179,6 +179,7 @@ type Conn struct {
 	// JLS BEGIN: retain pre-authentication datagrams and enforce client authentication.
 	jlsForwardCapture        *jlsForwardCapture
 	requireJLSAuthentication bool
+	jlsAuthFailurePending    bool
 	// JLS END
 
 	notifyReceivedPacket chan struct{}
@@ -587,6 +588,9 @@ func (c *Conn) preSetup() {
 // run the connection main loop
 func (c *Conn) run() (err error) {
 	defer func() { c.ctxCancel(err) }()
+	// JLS BEGIN: release authentication fallback capture on every connection exit.
+	defer c.releaseJLSForwardCapture()
+	// JLS END
 
 	defer func() {
 		// drain queued packets that will never be processed
@@ -713,13 +717,17 @@ runLoop:
 			c.framer.QueueControlFrame(&wire.PingFrame{})
 			c.keepAlivePingSent = true
 		} else if !c.handshakeComplete && now.Sub(c.creationTime) >= c.config.handshakeTimeout() {
-			c.destroyImpl(qerr.ErrHandshakeTimeout)
+			// JLS BEGIN: incomplete camouflage handshakes fall back without local QUIC output.
+			c.destroyImpl(c.handleJLSPreAuthFailure(qerr.ErrHandshakeTimeout))
+			// JLS END
 			break runLoop
 		} else {
 			idleTimeoutStartTime := c.idleTimeoutStartTime()
 			if (!c.handshakeComplete && now.Sub(idleTimeoutStartTime) >= c.config.HandshakeIdleTimeout) ||
 				(c.handshakeComplete && !now.Before(c.nextIdleTimeoutTime())) {
-				c.destroyImpl(qerr.ErrIdleTimeout)
+				// JLS BEGIN: incomplete camouflage handshakes fall back without local QUIC output.
+				c.destroyImpl(c.handleJLSPreAuthFailure(qerr.ErrIdleTimeout))
+				// JLS END
 				break runLoop
 			}
 		}
@@ -754,6 +762,13 @@ runLoop:
 			c.setCloseError(&closeError{err: err})
 			break runLoop
 		}
+		// JLS BEGIN: close only after Client Finished is queued for transmission.
+		// Closing the send queue drains packets that have already consumed the Handshake stream.
+		if c.jlsAuthFailurePending && !c.handshakeStream.HasData() {
+			c.setCloseError(&closeError{err: tls.ErrJLSAuthFailed})
+			break runLoop
+		}
+		// JLS END
 		if c.sendQueue.WouldBlock() {
 			// The send queue is still busy sending out packets. Wait until there's space to enqueue new packets.
 			sendQueueAvailable = c.sendQueue.Available()
@@ -1055,6 +1070,9 @@ func (c *Conn) handlePackets() (wasProcessed bool, _ error) {
 			datagramID = qlog.CalculateDatagramID(p.data)
 		}
 		processed, err := c.handleOnePacket(p, datagramID)
+		// JLS BEGIN: unauthenticated peer protocol errors must follow the camouflage path.
+		err = c.handleJLSPreAuthPacketResult(err)
+		// JLS END
 		if err != nil {
 			return false, err
 		}
@@ -1992,8 +2010,8 @@ func (c *Conn) handleFrame(
 func (c *Conn) handlePacket(p receivedPacket) {
 	c.receivedPacketMx.Lock()
 	canQueue := c.receivedPackets.Len() < protocol.MaxConnUnprocessedPackets
-	// JLS BEGIN: forward activated flows, but capture only packets quic-go can queue.
-	if c.handleJLSPacket(p, canQueue) {
+	// JLS BEGIN: forward activated flows and retain complete fallback datagrams.
+	if c.handleJLSPacket(p) {
 		c.receivedPacketMx.Unlock()
 		return
 	}
@@ -2069,9 +2087,10 @@ func (c *Conn) handleHandshakeEvents(now monotime.Time) error {
 		case handshake.EventNoEvent:
 			return nil
 		case handshake.EventHandshakeComplete:
-			// JLS BEGIN: reject camouflage TLS before publishing handshake completion.
+			// JLS BEGIN: reject camouflage TLS without suppressing the client's Finished.
 			if c.requireJLSAuthentication && c.cryptoStreamHandler.ConnectionState().JLS.Status != tls.JLSAuthenticated {
-				return tls.ErrJLSAuthFailed
+				c.jlsAuthFailurePending = true
+				break
 			}
 			// JLS END
 			// Don't call handleHandshakeComplete yet.

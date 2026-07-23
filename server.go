@@ -450,11 +450,15 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 		}
 		return false
 	}
-	// JLS BEGIN: apply the camouflage target's lazily resolved version profile.
-	versions, versionNegotiationVersions := s.config.quicVersionProfile()
-	versionSupported := protocol.IsSupportedVersion(versions, v)
+	versionSupported := protocol.IsSupportedVersion(s.config.Versions, v)
 	// send a Version Negotiation Packet if the client is speaking a different protocol version
 	if !versionSupported {
+		// JLS BEGIN: let the camouflage upstream classify locally unsupported versions.
+		if s.jlsForwarder != nil {
+			s.jlsForwarder.handleCamouflageVersionPacket(p)
+			return false
+		}
+		// JLS END
 		if s.disableVersionNegotiation {
 			if s.qlogger != nil {
 				s.qlogger.RecordEvent(qlog.PacketDropped{
@@ -477,13 +481,12 @@ func (s *baseServer) handlePacketImpl(p receivedPacket) bool /* is the buffer st
 			}
 			return false
 		}
-		if s.jlsForwarder != nil && protocol.IsSupportedVersion(versionNegotiationVersions, v) {
-			// The camouflage profile advertised this version, but this QUIC stack
-			// can't decode it. Let the real upstream produce the observable result.
-			s.jlsForwarder.handleCamouflageVersionPacket(p)
-			return false
-		}
 		return s.enqueueVersionNegotiationPacket(p)
+	}
+	// JLS BEGIN: let the camouflage upstream classify greased QUIC Fixed Bits.
+	if s.jlsForwarder != nil && !wire.IsPotentialQUICPacket(p.data[0]) {
+		s.jlsForwarder.handleCamouflageVersionPacket(p)
+		return false
 	}
 	// JLS END
 
@@ -699,6 +702,12 @@ func (s *baseServer) validateToken(token *handshake.Token, addr net.Addr) bool {
 
 func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error {
 	if len(hdr.Token) == 0 && hdr.DestConnectionID.Len() < protocol.MinConnectionIDLenInitial {
+		// JLS BEGIN: avoid a local short-DCID response fingerprint.
+		if s.forwardJLSInitialPacket(p) {
+			s.discardZeroRTTQueue(hdr.DestConnectionID)
+			return nil
+		}
+		// JLS END
 		if s.qlogger != nil {
 			s.qlogger.RecordEvent(qlog.PacketDropped{
 				Header: qlog.PacketHeader{
@@ -779,6 +788,23 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 		rtt = token.RTT
 	}
 
+	// JLS BEGIN: bound unauthenticated QUIC state before constructing a connection.
+	var authentication *jlsAuthenticationReservation
+	if s.jlsForwarder != nil {
+		authentication = s.jlsForwarder.reserveAuthentication(p.remoteAddr, time.Now())
+		if authentication == nil {
+			s.discardZeroRTTQueue(hdr.DestConnectionID)
+			s.forwardJLSInitialPacket(p)
+			return nil
+		}
+		defer func() {
+			if authentication != nil {
+				authentication.release()
+			}
+		}()
+	}
+	// JLS END
+
 	config := s.config
 	clientInfo := &ClientInfo{
 		RemoteAddr:   p.remoteAddr,
@@ -858,7 +884,8 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	)
 	// JLS BEGIN: let quic-go and TLS decide authentication before forwarding.
 	if conn.Conn != nil {
-		conn.enableJLSForwarding(s.jlsForwarder)
+		conn.enableJLSForwarding(s.jlsForwarder, authentication)
+		authentication = nil
 	}
 	// JLS END
 	conn.handlePacket(p)
@@ -868,6 +895,9 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	// The only time this collision will occur if we receive the two Initial packets at the same time.
 	if added := s.tr.AddWithConnID(hdr.DestConnectionID, connID, conn); !added {
 		delete(s.zeroRTTQueues, hdr.DestConnectionID)
+		// JLS BEGIN: no run loop exists to release this authentication reservation.
+		conn.releaseJLSForwardCapture()
+		// JLS END
 		conn.closeWithTransportError(ConnectionRefused)
 		return nil
 	}
@@ -887,6 +917,28 @@ func (s *baseServer) handleInitialImpl(p receivedPacket, hdr *wire.Header) error
 	go conn.run()
 	return nil
 }
+
+// JLS BEGIN: pre-connection camouflage forwarding helpers.
+
+func (s *baseServer) forwardJLSInitialPacket(p receivedPacket) bool {
+	if s.jlsForwarder == nil {
+		return false
+	}
+	s.jlsForwarder.handleCamouflageVersionPacket(p)
+	p.buffer.Release()
+	return true
+}
+
+func (s *baseServer) discardZeroRTTQueue(connID protocol.ConnectionID) {
+	if q, ok := s.zeroRTTQueues[connID]; ok {
+		for _, packet := range q.packets {
+			packet.buffer.Release()
+		}
+		delete(s.zeroRTTQueues, connID)
+	}
+}
+
+// JLS END
 
 func (s *baseServer) refuseNewConn(p receivedPacket, hdr *wire.Header) {
 	delete(s.zeroRTTQueues, hdr.DestConnectionID)
@@ -1133,24 +1185,16 @@ func (s *baseServer) maybeSendVersionNegotiationPacket(p receivedPacket) {
 
 	s.logger.Debugf("Client offered version %s, sending Version Negotiation", v)
 
-	// JLS BEGIN: advertise the camouflage target's Version Negotiation profile.
-	_, versions := s.config.quicVersionProfile()
-	var data []byte
-	if s.jlsForwarder != nil {
-		data = wire.ComposeVersionNegotiationExact(dest, src, versions)
-	} else {
-		data = wire.ComposeVersionNegotiation(dest, src, versions)
-	}
+	data := wire.ComposeVersionNegotiation(dest, src, s.config.Versions)
 	if s.qlogger != nil {
 		s.qlogger.RecordEvent(qlog.VersionNegotiationSent{
 			Header: qlog.PacketHeaderVersionNegotiation{
 				SrcConnectionID:  src,
 				DestConnectionID: dest,
 			},
-			SupportedVersions: versions,
+			SupportedVersions: s.config.Versions,
 		})
 	}
-	// JLS END
 	if _, err := s.conn.WritePacket(data, p.remoteAddr, p.info.OOB(), 0, protocol.ECNUnsupported); err != nil {
 		s.logger.Debugf("Error sending Version Negotiation: %s", err)
 	}

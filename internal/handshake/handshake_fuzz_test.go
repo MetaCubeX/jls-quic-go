@@ -267,6 +267,7 @@ func fuzzRunHandshake(
 		nil,
 		utils.DefaultLogger.WithPrefix("client"),
 		protocol.Version1,
+		nil,
 	)
 	if err := client.StartHandshake(context.Background()); err != nil {
 		t.Fatal(err)

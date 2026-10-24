@@ -10,6 +10,7 @@ import (
 	"github.com/metacubex/jls-quic-go/internal/protocol"
 	"github.com/metacubex/jls-quic-go/qlogwriter"
 	"github.com/metacubex/jls-quic-go/quicvarint"
+	utls "github.com/metacubex/utls"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,6 +99,8 @@ func configWithNonZeroNonFunctionFields(t *testing.T) *Config {
 				RateLimit:    1024,
 			}))
 		// JLS END
+		case "UtlsClientHelloID":
+			f.Set(reflect.ValueOf(&utls.HelloChrome_Auto))
 		case "ConnectionIDLength":
 			f.Set(reflect.ValueOf(8))
 		case "ConnectionIDGenerator":

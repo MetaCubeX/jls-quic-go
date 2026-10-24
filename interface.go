@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/metacubex/jls-tls"
+	utls "github.com/metacubex/utls"
 	"golang.org/x/exp/slices"
 	"net"
 	"time"
@@ -124,6 +125,11 @@ type Config struct {
 	// JLS BEGIN: ShadowQUIC JLS camouflage configuration.
 	JLSConfig *JLSConfig
 	// JLS END
+	// UtlsClientHelloID, when non-nil, builds the QUIC ClientHello from a
+	// uTLS fingerprint instead of the stock Go ClientHello. It is only used
+	// for client connections. The default (nil) leaves the existing behavior
+	// unchanged.
+	UtlsClientHelloID *utls.ClientHelloID
 	// HandshakeIdleTimeout is the idle timeout before completion of the handshake.
 	// If we don't receive any packet from the peer within this time, the connection attempt is aborted.
 	// Additionally, if the handshake doesn't complete in twice this time, the connection attempt is also aborted.

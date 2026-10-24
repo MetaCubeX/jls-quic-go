@@ -111,6 +111,7 @@ func populateConfig(config *Config) *Config {
 		// JLS BEGIN: preserve the ShadowQUIC JLS camouflage configuration.
 		JLSConfig: config.JLSConfig,
 		// JLS END
+		UtlsClientHelloID:                config.UtlsClientHelloID,
 		HandshakeIdleTimeout:             handshakeIdleTimeout,
 		MaxIdleTimeout:                   idleTimeout,
 		KeepAlivePeriod:                  config.KeepAlivePeriod,

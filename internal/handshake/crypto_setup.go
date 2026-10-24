@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/metacubex/jls-tls"
+	utls "github.com/metacubex/utls"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -38,6 +39,7 @@ type cryptoSetup struct {
 
 	zeroRTTParameters *wire.TransportParameters
 	allow0RTT         bool
+	initErr           error
 
 	rttStats *utils.RTTStats
 
@@ -76,6 +78,7 @@ func NewCryptoSetupClient(
 	qlogger qlogwriter.Recorder,
 	logger utils.Logger,
 	version protocol.Version,
+	utlsClientHelloID *utls.ClientHelloID,
 ) CryptoSetup {
 	cs := newCryptoSetup(
 		connID,
@@ -90,11 +93,17 @@ func NewCryptoSetupClient(
 	cs.tlsConf = tlsConf
 	cs.allow0RTT = enable0RTT
 
+	tpBytes := cs.ourParams.Marshal(protocol.PerspectiveClient)
+	var rawClientHello *tls.RawClientHello
+	if utlsClientHelloID != nil {
+		rawClientHello, cs.initErr = buildUTLSClientHello(tlsConf, tpBytes, *utlsClientHelloID)
+	}
 	cs.conn = tls.QUICClient(&tls.QUICConfig{
 		TLSConfig:           tlsConf,
 		EnableSessionEvents: true,
+		ClientHello:         rawClientHello,
 	})
-	cs.conn.SetTransportParameters(cs.ourParams.Marshal(protocol.PerspectiveClient))
+	cs.conn.SetTransportParameters(tpBytes)
 
 	return cs
 }
@@ -186,6 +195,9 @@ func (h *cryptoSetup) SetLargest1RTTAcked(pn protocol.PacketNumber) error {
 }
 
 func (h *cryptoSetup) StartHandshake(ctx context.Context) error {
+	if h.initErr != nil {
+		return h.initErr
+	}
 	err := h.conn.Start(context.WithValue(ctx, QUICVersionContextKey, h.version))
 	if err != nil {
 		return wrapError(err)

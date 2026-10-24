@@ -4,10 +4,11 @@ go 1.20
 
 require (
 	github.com/metacubex/http v0.1.7
-	github.com/metacubex/jls-tls v0.0.0-20260723084315-67adc0e2f796
+	github.com/metacubex/jls-tls v0.0.0-20261024144302-eba66ee88a9d
 	github.com/metacubex/qpack v0.6.0
 	github.com/metacubex/randv2 v0.2.0
 	github.com/metacubex/tls v0.1.7
+	github.com/metacubex/utls v1.8.8
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/mock v0.4.0
 	golang.org/x/crypto v0.33.0
@@ -15,6 +16,11 @@ require (
 	golang.org/x/net v0.35.0
 	golang.org/x/sync v0.11.0
 	golang.org/x/sys v0.30.0
+)
+
+require (
+	github.com/andybalholm/brotli v1.0.6 // indirect
+	github.com/klauspost/compress v1.17.9 // indirect
 )
 
 require (
@@ -28,3 +34,4 @@ require (
 	golang.org/x/text v0.22.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
